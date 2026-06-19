@@ -46,6 +46,12 @@ logging.basicConfig(
     format="[%(asctime)s] %(levelname)s %(name)s: %(message)s",
 )
 
+# Raiz do projeto (icsm31-projeto/), um nivel acima de client/.
+# Usada para resolver os defaults de data/ e reports/ independentemente do cwd.
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DEFAULT_DATA_DIR = os.path.join(PROJECT_ROOT, "data")
+DEFAULT_REPORT_DIR = os.path.join(PROJECT_ROOT, "reports")
+
 SERVERS = {
     "python": "http://127.0.0.1:5001/reconstruct",
     "go": "http://127.0.0.1:5002/reconstruct",
@@ -295,9 +301,15 @@ def run_rounds(
 def main() -> int:
     parser = argparse.ArgumentParser(description="Cliente ICSM31 — reconstrucao de imagens")
     parser.add_argument("--rounds", type=int, default=5, help="numero de rodadas (default 5)")
-    parser.add_argument("--data-dir", default="data", help="diretorio dos dados (default ./data)")
     parser.add_argument(
-        "--report-dir", default="reports", help="diretorio de saida (default ./reports)"
+        "--data-dir",
+        default=DEFAULT_DATA_DIR,
+        help="diretorio dos dados (default: <raiz do projeto>/data)",
+    )
+    parser.add_argument(
+        "--report-dir",
+        default=DEFAULT_REPORT_DIR,
+        help="diretorio de saida (default: <raiz do projeto>/reports)",
     )
     parser.add_argument("--timeout", type=float, default=300.0, help="timeout HTTP em segundos")
     parser.add_argument("--seed", type=int, default=None, help="seed do RNG (opcional)")
