@@ -259,8 +259,8 @@ O relatório final compara os dois servidores e inclui:
 - **Análise qualitativa** das imagens geradas
 - **Conclusões** sobre trade-offs entre linguagem interpretada vs compilada
 
-O cliente gera **automaticamente** um relatório comparativo preenchido
-(`reports/relatorio_comparativo_<timestamp>.md`) com tempos médios, desvio
+O cliente gera **automaticamente** um relatório comparativo preenchido em **PDF**
+(`reports/relatorio_comparativo_<timestamp>.pdf`) com tempos médios, desvio
 padrão, iterações médias e throughput reais de cada execução — produzido por
 [`client/comparative_report.py`](client/comparative_report.py). O template em
 branco [`reports/relatorio_comparativo_template.md`](reports/relatorio_comparativo_template.md)

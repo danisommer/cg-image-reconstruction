@@ -312,7 +312,7 @@ def run_rounds(
     generate_report(all_results, out_path)
     LOG.info("Relatorio gerado em %s (%d reconstrucoes)", out_path, len(all_results))
 
-    comp_path = os.path.join(report_dir, f"relatorio_comparativo_{ts}.md")
+    comp_path = os.path.join(report_dir, f"relatorio_comparativo_{ts}.pdf")
     generate_comparative_report(all_results, comp_path)
     LOG.info("Relatorio comparativo gerado em %s", comp_path)
 
