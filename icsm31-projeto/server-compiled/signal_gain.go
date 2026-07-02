@@ -1,22 +1,19 @@
-// Package main — Ganho de sinal aplicado ao vetor g.
+// Package main — Ganho de sinal aplicado ao vetor g, em Go puro (sem gonum).
 package main
 
-import (
-	"math"
-
-	"gonum.org/v1/gonum/mat"
-)
+import "math"
 
 // ApplySignalGain aplica gamma_l = 100 + (1/20)*sqrt(l*l) a cada amostra l
-// do sinal. Espera-se g organizado em ordem column-major: para cada sensor
-// c em [0,N), as S amostras consecutivas correspondem a l = 1..S.
-func ApplySignalGain(g *mat.VecDense, S, N int) {
-	if g.Len() != S*N {
+// do sinal, in-place. Espera-se g organizado em ordem column-major: para cada
+// sensor c em [0,N), as S amostras consecutivas correspondem a l = 1..S.
+func ApplySignalGain(g []float64, S, N int) {
+	n := len(g)
+	if n != S*N {
 		// fallback: aplica apenas onde houver l valido
-		for l := 0; l < g.Len() && l < S; l++ {
+		for l := 0; l < n && l < S; l++ {
 			ll := float64(l + 1)
 			gamma := 100.0 + (1.0/20.0)*math.Sqrt(ll*ll)
-			g.SetVec(l, g.AtVec(l)*gamma)
+			g[l] *= gamma
 		}
 		return
 	}
@@ -26,8 +23,7 @@ func ApplySignalGain(g *mat.VecDense, S, N int) {
 		for l := 0; l < S; l++ {
 			ll := float64(l + 1)
 			gamma := 100.0 + (1.0/20.0)*math.Sqrt(ll*ll)
-			idx := base + l
-			g.SetVec(idx, g.AtVec(idx)*gamma)
+			g[base+l] *= gamma
 		}
 	}
 }

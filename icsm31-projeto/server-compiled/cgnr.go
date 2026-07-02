@@ -1,4 +1,6 @@
-// Package main — CGNR (Conjugate Gradient Normal Residual) em Go.
+// Package main — CGNR (Conjugate Gradient Normal Residual) em Go puro.
+//
+// Toda a algebra linear e feita no proprio codigo (ver linalg.go), sem gonum.
 //
 // Algoritmo:
 //
@@ -19,8 +21,6 @@ package main
 import (
 	"math"
 	"time"
-
-	"gonum.org/v1/gonum/mat"
 )
 
 // CGNR resolve H * f = g por gradiente conjugado no residual normal.
@@ -35,54 +35,49 @@ import (
 //   - f: vetor reconstruido (tamanho M)
 //   - nIter: numero de iteracoes executadas
 //   - tempo: duracao da reconstrucao
-func CGNR(H *mat.Dense, g *mat.VecDense, maxIter int, tol float64) (*mat.VecDense, int, time.Duration) {
+func CGNR(H *Matrix, g []float64, maxIter int, tol float64) ([]float64, int, time.Duration) {
 	t0 := time.Now()
 
-	_, m := H.Dims()
+	m := H.Cols
 
-	f := mat.NewVecDense(m, nil)
+	f := make([]float64, m)
 
-	r := mat.VecDenseCopyOf(g)
-	var Hf mat.VecDense
-	Hf.MulVec(H, f)
-	r.SubVec(r, &Hf)
+	// r0 = g - H*f0 = g (pois f0 = 0)
+	r := append([]float64(nil), g...)
+	z := H.TMatVec(r)
+	p := append([]float64(nil), z...)
 
-	z := mat.NewVecDense(m, nil)
-	z.MulVec(H.T(), r)
-
-	p := mat.VecDenseCopyOf(z)
-
-	zNormSq := mat.Dot(z, z)
+	zNormSq := Dot(z, z)
 	// epsilon = ||r_i+1||_2 - ||r_i||_2 (diferenca de normas, conforme enunciado)
-	prevRNorm := math.Sqrt(mat.Dot(r, r))
+	prevRNorm := math.Sqrt(Dot(r, r))
 
 	nIter := 0
-	w := mat.NewVecDense(H.RawMatrix().Rows, nil)
-	zNext := mat.NewVecDense(m, nil)
-
 	for i := 0; i < maxIter; i++ {
 		nIter = i + 1
 
-		w.MulVec(H, p)
-		wNormSq := mat.Dot(w, w)
+		w := H.MatVec(p)
+		wNormSq := Dot(w, w)
 		if wNormSq == 0 {
 			break
 		}
 
 		alpha := zNormSq / wNormSq
 
-		f.AddScaledVec(f, alpha, p)
-		r.AddScaledVec(r, -alpha, w)
+		for k := range f {
+			f[k] += alpha * p[k]
+		}
+		for k := range r {
+			r[k] -= alpha * w[k]
+		}
 
-		newRNorm := math.Sqrt(mat.Dot(r, r))
-		epsilon := newRNorm - prevRNorm
-		if math.Abs(epsilon) < tol {
+		newRNorm := math.Sqrt(Dot(r, r))
+		if math.Abs(newRNorm-prevRNorm) < tol {
 			break
 		}
 		prevRNorm = newRNorm
 
-		zNext.MulVec(H.T(), r)
-		zNextNormSq := mat.Dot(zNext, zNext)
+		zNext := H.TMatVec(r)
+		zNextNormSq := Dot(zNext, zNext)
 
 		if zNormSq == 0 {
 			break
@@ -90,9 +85,9 @@ func CGNR(H *mat.Dense, g *mat.VecDense, maxIter int, tol float64) (*mat.VecDens
 		beta := zNextNormSq / zNormSq
 
 		// p = zNext + beta * p
-		p.AddScaledVec(zNext, beta, p)
-
-		z.CopyVec(zNext)
+		for k := range p {
+			p[k] = zNext[k] + beta*p[k]
+		}
 		zNormSq = zNextNormSq
 	}
 

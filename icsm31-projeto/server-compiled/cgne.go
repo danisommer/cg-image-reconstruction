@@ -1,4 +1,6 @@
-// Package main — CGNE (Conjugate Gradient Normal Error) em Go.
+// Package main — CGNE (Conjugate Gradient Normal Error) em Go puro.
+//
+// Toda a algebra linear e feita no proprio codigo (ver linalg.go), sem gonum.
 //
 // Algoritmo:
 //
@@ -16,52 +18,46 @@ package main
 import (
 	"math"
 	"time"
-
-	"gonum.org/v1/gonum/mat"
 )
 
 // CGNE resolve H * f = g por gradiente conjugado no erro normal.
-func CGNE(H *mat.Dense, g *mat.VecDense, maxIter int, tol float64) (*mat.VecDense, int, time.Duration) {
+func CGNE(H *Matrix, g []float64, maxIter int, tol float64) ([]float64, int, time.Duration) {
 	t0 := time.Now()
 
-	s, m := H.Dims()
+	m := H.Cols
 
-	f := mat.NewVecDense(m, nil)
+	f := make([]float64, m)
 
-	r := mat.VecDenseCopyOf(g)
-	var Hf mat.VecDense
-	Hf.MulVec(H, f)
-	r.SubVec(r, &Hf)
+	// r0 = g - H*f0 = g (pois f0 = 0)
+	r := append([]float64(nil), g...)
+	p := H.TMatVec(r)
 
-	p := mat.NewVecDense(m, nil)
-	p.MulVec(H.T(), r)
-
-	rNormSq := mat.Dot(r, r)
+	rNormSq := Dot(r, r)
 	prevRNorm := math.Sqrt(rNormSq)
-
-	Hp := mat.NewVecDense(s, nil)
-	HtR := mat.NewVecDense(m, nil)
 
 	nIter := 0
 	for i := 0; i < maxIter; i++ {
 		nIter = i + 1
 
-		pNormSq := mat.Dot(p, p)
+		pNormSq := Dot(p, p)
 		if pNormSq == 0 {
 			break
 		}
 		alpha := rNormSq / pNormSq
 
-		f.AddScaledVec(f, alpha, p)
+		for k := range f {
+			f[k] += alpha * p[k]
+		}
 
-		Hp.MulVec(H, p)
-		r.AddScaledVec(r, -alpha, Hp)
+		Hp := H.MatVec(p)
+		for k := range r {
+			r[k] -= alpha * Hp[k]
+		}
 
-		newRNormSq := mat.Dot(r, r)
+		newRNormSq := Dot(r, r)
 		newRNorm := math.Sqrt(newRNormSq)
 
-		epsilon := newRNorm - prevRNorm
-		if math.Abs(epsilon) < tol {
+		if math.Abs(newRNorm-prevRNorm) < tol {
 			break
 		}
 		prevRNorm = newRNorm
@@ -71,9 +67,11 @@ func CGNE(H *mat.Dense, g *mat.VecDense, maxIter int, tol float64) (*mat.VecDens
 		}
 		beta := newRNormSq / rNormSq
 
-		HtR.MulVec(H.T(), r)
+		HtR := H.TMatVec(r)
 		// p = H^T r + beta * p
-		p.AddScaledVec(HtR, beta, p)
+		for k := range p {
+			p[k] = HtR[k] + beta*p[k]
+		}
 
 		rNormSq = newRNormSq
 	}

@@ -4,3 +4,5 @@ icsm31-projeto/server-compiled/server_compiled
 data/
 icsm31-projeto/reports
 .DS_Store
+__pycache__/
+*.pyc

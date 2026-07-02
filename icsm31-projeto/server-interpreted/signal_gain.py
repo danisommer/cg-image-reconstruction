@@ -1,41 +1,41 @@
 """
-Ganho de sinal aplicado ao vetor (ou matriz) g antes da reconstrucao.
+Ganho de sinal aplicado ao vetor g antes da reconstrucao — Python puro.
 
 Formula:
     for c = 1 .. N:
         for l = 1 .. S:
             gamma_l = 100 + (1/20) * sqrt(l * l)
             g[l, c] = g[l, c] * gamma_l
+
+O vetor g chega achatado em ordem coluna-a-coluna (Fortran): o indice plano
+k mapeia para a amostra l = k % S e o sensor c = k // S. Assim basta
+multiplicar cada posicao pelo gamma da sua amostra l.
 """
 
 from __future__ import annotations
 
-import numpy as np
+from typing import List, Sequence
 
 
-def apply_signal_gain(g: np.ndarray, S: int, N: int) -> np.ndarray:
+def apply_signal_gain(g: Sequence[float], S: int, N: int) -> List[float]:
     """Aplica o ganho gamma_l a cada amostra l do sinal.
 
     Args:
-        g: vetor de sinal (shape (S*N,)) ou matriz (shape (S, N)).
+        g: vetor de sinal achatado (tamanho S*N, ordem coluna-a-coluna) ou de
+           tamanho S (um unico sensor).
         S: numero de amostras por sensor.
         N: numero de sensores.
 
     Returns:
-        novo array com o ganho aplicado (mesmo shape do input).
+        nova lista com o ganho aplicado (mesmo tamanho do input).
     """
-    g = np.asarray(g, dtype=np.float64)
+    # gamma_l = 100 + (1/20) * sqrt(l*l), para l = 1..S (raiz via expoente 0.5)
+    gamma = [100.0 + (1.0 / 20.0) * ((l * l) ** 0.5) for l in range(1, S + 1)]
 
-    l_indices = np.arange(1, S + 1, dtype=np.float64)
-    gamma = 100.0 + (1.0 / 20.0) * np.sqrt(l_indices * l_indices)
+    n = len(g)
+    if n == S * N:
+        # k -> amostra l = k % S (ordem coluna-a-coluna)
+        return [g[k] * gamma[k % S] for k in range(n)]
 
-    if g.ndim == 1:
-        if g.size == S * N:
-            g_mat = g.reshape(S, N, order="F")
-            g_mat = g_mat * gamma[:, np.newaxis]
-            return g_mat.reshape(-1, order="F")
-        # caso 1D com tamanho S apenas
-        return g * gamma[: g.size]
-
-    # caso 2D (S, N)
-    return g * gamma[:, np.newaxis]
+    # caso 1D com tamanho S (ou menor): aplica gamma amostra a amostra
+    return [g[i] * gamma[i] for i in range(n)]

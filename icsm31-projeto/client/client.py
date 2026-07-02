@@ -1,30 +1,31 @@
 """
-Cliente Python — envia sinais g aos dois servidores e coleta resultados.
+Cliente Python — envia sinais g aos servidores, UM DE CADA VEZ, e coleta os
+resultados.
 
 Comportamento:
     1. Carrega matrizes H e sinais g do diretorio data/.
     2. Monta os jobs conforme o modo:
          - aleatorio (padrao): sorteia algoritmo (cgnr/cgne) e sinal a cada rodada;
          - percorrer todas (--all): cada algoritmo x cada sinal, repetido --passes vezes.
-    3. Envia cada job aos dois servidores (Python:5001 e Go:5002):
-         - paralelo (padrao): os dois ao mesmo tempo;
-         - serie (--serie): Python, espera, depois Go.
-    4. Espera um intervalo aleatorio (0.5 s a 3 s) entre jobs.
-    5. Ao final, gera os relatorios PDF (imagens + comparativo) em reports/.
+    3. Executa TODAS as rodadas contra o PRIMEIRO servidor (sequencialmente).
+    4. Entra em modo de espera e pede ao usuario para DERRUBAR o primeiro
+       servidor e SUBIR o segundo (os servidores NUNCA rodam em paralelo).
+    5. Executa exatamente as MESMAS rodadas contra o segundo servidor
+       (mesmo g em cada rodada -> comparacao justa entre implementacoes).
+    6. Ao final, gera os relatorios PDF (imagens + comparativo) em reports/.
 
 Uso:
-    python client/client.py                   # padrao: 10 rodadas aleatorias, paralelo
-    python client/client.py --rounds 20       # 20 rodadas aleatorias
-    python client/client.py --all             # percorre todas as combinacoes 1 vez
-    python client/client.py --all --passes 3  # percorre todas as combinacoes 3 vezes
-    python client/client.py --serie           # envia aos servidores em serie
+    python client/client.py                       # 5 rodadas aleatorias
+    python client/client.py --rounds 20           # 20 rodadas aleatorias
+    python client/client.py --all                 # percorre todas as combinacoes 1 vez
+    python client/client.py --all --passes 3      # percorre todas as combinacoes 3 vezes
+    python client/client.py --order go,python     # inverte a ordem dos servidores
 """
 
 from __future__ import annotations
 
 import argparse
 import base64
-import concurrent.futures as futures
 import logging
 import os
 import random
@@ -33,9 +34,8 @@ import time
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Sequence, Tuple
 
-import numpy as np
 import requests
 
 from comparative_report import generate_comparative_report
@@ -49,6 +49,20 @@ class SignalFile:
     path: str
     apply_gain: bool  # True se o sinal e bruto e precisa de ganho
     model: int  # modelo (1 ou 2) ao qual o sinal pertence
+
+
+@dataclass
+class RoundSpec:
+    """Descricao imutavel de uma rodada — reaproveitada por cada servidor."""
+
+    round_idx: int
+    request_id: str
+    algorithm: str
+    model: int
+    signal: SignalFile
+    g: List[float]
+    h_path: str
+
 
 LOG = logging.getLogger("client")
 logging.basicConfig(
@@ -67,17 +81,28 @@ SERVERS = {
     "go": "http://127.0.0.1:5002/reconstruct",
 }
 
+_SERVER_LABEL = {
+    "python": "Python (interpretado, porta 5001)",
+    "go": "Go (compilado, porta 5002)",
+}
+
 MODEL_CONFIG = {
     1: {"S": 794, "N": 64, "size": (60, 60)},
     2: {"S": 436, "N": 64, "size": (30, 30)},
 }
 
 
-def _load_signal(path: str) -> np.ndarray:
-    """Carrega um vetor de sinal g de .npy ou texto."""
-    if path.endswith(".npy"):
-        return np.load(path).astype(np.float64).ravel()
-    return np.loadtxt(path, dtype=np.float64).ravel()
+def _load_signal(path: str) -> List[float]:
+    """Carrega um vetor de sinal g de arquivo CSV/texto, em Python puro."""
+    values: List[float] = []
+    with open(path, "r") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            parts = line.split(",") if "," in line else line.split()
+            values.extend(float(p) for p in parts)
+    return values
 
 
 def _discover_signals(data_dir: str, model: int) -> List[SignalFile]:
@@ -90,13 +115,11 @@ def _discover_signals(data_dir: str, model: int) -> List[SignalFile]:
         Modelo 2 (30x30):
             - g-30x30-*.csv    -> sinais brutos          (apply_gain=True)
             - A-30x30-*.csv    -> sinais com ganho ja aplicado (apply_gain=False)
-
-    Tambem aceita .npy nas mesmas nomenclaturas para quem pre-converter.
     """
     if not os.path.isdir(data_dir):
         return []
 
-    exts = (".csv", ".npy", ".txt")
+    exts = (".csv", ".txt")
     files = sorted(os.listdir(data_dir))
 
     def _is_signal(fn: str) -> bool:
@@ -139,15 +162,9 @@ def _discover_all_signals(data_dir: str) -> List[SignalFile]:
 
 
 def _resolve_h_path(data_dir: str, model: int) -> Optional[str]:
-    """Resolve o caminho do arquivo H para o modelo (padroes do professor).
-
-    Procura, em ordem: H-<model>.npy (mais rapido), H-<model>.csv,
-    e os nomes alternativos H_modelo_<model>.npy/.csv.
-    """
+    """Resolve o caminho do arquivo H (CSV) para o modelo (padroes do professor)."""
     candidates = [
-        f"H-{model}.npy",
         f"H-{model}.csv",
-        f"H_modelo_{model}.npy",
         f"H_modelo_{model}.csv",
     ]
     for name in candidates:
@@ -160,7 +177,7 @@ def _resolve_h_path(data_dir: str, model: int) -> Optional[str]:
 def _send_one(
     server_name: str,
     url: str,
-    g: np.ndarray,
+    g: Sequence[float],
     algorithm: str,
     model: int,
     h_path: Optional[str],
@@ -170,7 +187,7 @@ def _send_one(
 ) -> Optional[ReconstructionResult]:
     """Envia uma requisicao para um servidor e devolve o resultado."""
     payload = {
-        "g": g.tolist(),
+        "g": list(g),
         "algorithm": algorithm,
         "model": model,
         "apply_gain": apply_gain,
@@ -236,41 +253,150 @@ def _build_jobs(
     rounds: int,
     passes: int,
     rng: random.Random,
-) -> List[tuple]:
+) -> List[Tuple[str, SignalFile]]:
     """Monta a lista de jobs (algoritmo, sinal) conforme o modo escolhido.
 
     - Modo aleatorio: `rounds` jobs, cada um sorteando algoritmo e sinal.
     - Modo "percorrer todas": todas as combinacoes (cgnr/cgne x cada sinal),
       repetidas `passes` vezes.
 
-    Em ambos os modos, cada job e enviado aos DOIS servidores (Python e Go),
-    entao o numero de imagens geradas e o dobro do numero de jobs.
+    A lista de jobs e fixa (montada uma unica vez) e depois reproduzida
+    identicamente em cada servidor — garantindo comparacao justa.
     """
     if sweep_all:
-        jobs: List[tuple] = []
+        jobs: List[Tuple[str, SignalFile]] = []
         for _ in range(passes):
             for algorithm in ("cgnr", "cgne"):
                 for signal in signal_pool:
                     jobs.append((algorithm, signal))
         LOG.info(
             "Modo: PERCORRER TODAS — %d sinais x 2 algoritmos x %d passada(s) = "
-            "%d jobs (%d imagens nos 2 servidores)",
+            "%d rodadas por servidor",
             len(signal_pool),
             passes,
             len(jobs),
-            len(jobs) * 2,
         )
         return jobs
 
     jobs = [
         (rng.choice(["cgnr", "cgne"]), rng.choice(signal_pool)) for _ in range(rounds)
     ]
-    LOG.info(
-        "Modo: ALEATORIO — %d rodada(s) (%d imagens nos 2 servidores)",
-        rounds,
-        rounds * 2,
-    )
+    LOG.info("Modo: ALEATORIO — %d rodada(s) por servidor", rounds)
     return jobs
+
+
+def _build_plan(
+    jobs: List[Tuple[str, SignalFile]],
+    data_dir: str,
+) -> List[RoundSpec]:
+    """Converte os jobs num plano fixo (carrega g e resolve H uma unica vez)."""
+    plan: List[RoundSpec] = []
+    for round_idx, (algorithm, signal) in enumerate(jobs, start=1):
+        request_id = uuid.uuid4().hex[:8]
+        model = signal.model
+
+        try:
+            g = _load_signal(signal.path)
+        except Exception as exc:  # noqa: BLE001
+            LOG.error("[%s] erro lendo %s: %s", request_id, signal.path, exc)
+            continue
+
+        h_path = _resolve_h_path(data_dir, model)
+        if h_path is None:
+            LOG.warning(
+                "[%s] matriz H nao encontrada para modelo %d em %s — pulando",
+                request_id,
+                model,
+                data_dir,
+            )
+            continue
+
+        plan.append(
+            RoundSpec(
+                round_idx=round_idx,
+                request_id=request_id,
+                algorithm=algorithm,
+                model=model,
+                signal=signal,
+                g=g,
+                h_path=h_path,
+            )
+        )
+    return plan
+
+
+def _prompt_server_swap(server_name: str, phase_idx: int, order: List[str]) -> None:
+    """Entra em modo de espera ate o usuario confirmar qual servidor esta no ar.
+
+    Antes da primeira fase, pede para subir o primeiro servidor. Entre fases,
+    pede explicitamente para DERRUBAR o servidor anterior e SUBIR o proximo —
+    os servidores nunca devem rodar simultaneamente.
+    """
+    label = _SERVER_LABEL.get(server_name, server_name)
+    if phase_idx == 0:
+        msg = (
+            f"\n>>> Suba APENAS o servidor {label}.\n"
+            f">>> Lembre-se: os servidores NAO rodam em paralelo — um de cada vez.\n"
+            f">>> Pressione ENTER quando ele estiver no ar para iniciar os envios... "
+        )
+    else:
+        prev = order[phase_idx - 1]
+        prev_label = _SERVER_LABEL.get(prev, prev)
+        msg = (
+            f"\n>>> Fase do servidor {prev_label} concluida.\n"
+            f">>> Agora DERRUBE o servidor {prev_label} e SUBA o servidor {label}.\n"
+            f">>> Pressione ENTER quando a troca estiver feita para continuar... "
+        )
+    try:
+        input(msg)
+    except EOFError:
+        LOG.warning("Entrada nao interativa (EOF); prosseguindo sem confirmacao.")
+
+
+def _run_server_phase(
+    server_name: str,
+    url: str,
+    plan: List[RoundSpec],
+    timeout_s: float,
+    rng: random.Random,
+) -> List[ReconstructionResult]:
+    """Executa todas as rodadas do plano contra UM servidor, sequencialmente."""
+    results: List[ReconstructionResult] = []
+    total = len(plan)
+    for i, spec in enumerate(plan, start=1):
+        LOG.info(
+            "[%s][%s] rodada %d/%d modelo=%d algo=%s sinal=%s ganho=%s",
+            spec.request_id,
+            server_name,
+            i,
+            total,
+            spec.model,
+            spec.algorithm,
+            os.path.basename(spec.signal.path),
+            "sim" if spec.signal.apply_gain else "ja_aplicado",
+        )
+
+        rec = _send_one(
+            server_name,
+            url,
+            spec.g,
+            spec.algorithm,
+            spec.model,
+            spec.h_path,
+            spec.request_id,
+            timeout_s,
+            spec.signal.apply_gain,
+        )
+        if rec is not None:
+            results.append(rec)
+
+        # intervalo aleatorio entre rodadas
+        if i < total:
+            delay = rng.uniform(0.5, 3.0)
+            LOG.info("[%s] aguardando %.2fs ate proxima rodada", spec.request_id, delay)
+            time.sleep(delay)
+
+    return results
 
 
 def run_rounds(
@@ -278,16 +404,14 @@ def run_rounds(
     report_dir: str,
     timeout_s: float,
     seed: Optional[int],
+    order: List[str],
     sweep_all: bool,
     rounds: int,
     passes: int,
-    parallel: bool,
 ) -> None:
     rng = random.Random(seed)
 
     os.makedirs(report_dir, exist_ok=True)
-
-    all_results: List[ReconstructionResult] = []
 
     # Pool global de sinais: cobre os dois modelos (1 e 2) e os dois tipos de
     # ganho (aplicar ou nao). No modo aleatorio sorteia-se daqui; no modo
@@ -298,109 +422,50 @@ def run_rounds(
         return
 
     jobs = _build_jobs(signal_pool, sweep_all, rounds, passes, rng)
-    total = len(jobs)
+    plan = _build_plan(jobs, data_dir)
+    if not plan:
+        LOG.error("Nenhuma rodada valida montada — nada a fazer.")
+        return
 
-    LOG.info(
-        "Envio aos servidores: %s",
-        "PARALELO (Python e Go ao mesmo tempo)"
-        if parallel
-        else "SERIE (Python, espera, depois Go)",
-    )
+    all_results: List[ReconstructionResult] = []
 
-    # No modo paralelo cada job dispara os 2 servidores ao mesmo tempo (pool de
-    # 2 threads). No modo serie nao ha pool: chama-se um servidor de cada vez.
-    pool = futures.ThreadPoolExecutor(max_workers=2) if parallel else None
-    try:
-        for job_idx, (algorithm, signal) in enumerate(jobs, start=1):
-            request_id = uuid.uuid4().hex[:8]
+    # Executa o mesmo plano contra cada servidor, UM DE CADA VEZ. Entre fases,
+    # o cliente espera o usuario derrubar um servidor e subir o proximo.
+    for phase_idx, server_name in enumerate(order):
+        url = SERVERS.get(server_name)
+        if url is None:
+            LOG.error("Servidor desconhecido: %s — pulando.", server_name)
+            continue
 
-            # modelo e ganho vem do sinal do job
-            model = signal.model
-            try:
-                g = _load_signal(signal.path)
-            except Exception as exc:  # noqa: BLE001
-                LOG.error("[%s] erro lendo %s: %s", request_id, signal.path, exc)
-                continue
+        _prompt_server_swap(server_name, phase_idx, order)
 
-            h_path = _resolve_h_path(data_dir, model)
-            if h_path is None:
-                LOG.warning(
-                    "[%s] matriz H nao encontrada para modelo %d em %s — pulando",
-                    request_id,
-                    model,
-                    data_dir,
-                )
-                continue
-
-            LOG.info(
-                "[%s] job %d/%d modelo=%d algo=%s sinal=%s ganho=%s",
-                request_id,
-                job_idx,
-                total,
-                model,
-                algorithm,
-                os.path.basename(signal.path),
-                "sim" if signal.apply_gain else "ja_aplicado",
-            )
-
-            if parallel:
-                futs = {
-                    pool.submit(
-                        _send_one,
-                        name,
-                        url,
-                        g,
-                        algorithm,
-                        model,
-                        h_path,
-                        request_id,
-                        timeout_s,
-                        signal.apply_gain,
-                    ): name
-                    for name, url in SERVERS.items()
-                }
-                for fut in futures.as_completed(futs):
-                    rec = fut.result()
-                    if rec is not None:
-                        all_results.append(rec)
-            else:
-                # serie: um servidor por vez, na ordem (Python depois Go)
-                for name, url in SERVERS.items():
-                    rec = _send_one(
-                        name,
-                        url,
-                        g,
-                        algorithm,
-                        model,
-                        h_path,
-                        request_id,
-                        timeout_s,
-                        signal.apply_gain,
-                    )
-                    if rec is not None:
-                        all_results.append(rec)
-
-            # intervalo aleatorio entre jobs
-            if job_idx < total:
-                delay = rng.uniform(0.5, 3.0)
-                LOG.info("[%s] aguardando %.2fs ate o proximo job", request_id, delay)
-                time.sleep(delay)
-    finally:
-        if pool is not None:
-            pool.shutdown()
+        LOG.info(
+            "=== Fase %d/%d — %d rodadas contra o servidor '%s' ===",
+            phase_idx + 1,
+            len(order),
+            len(plan),
+            server_name,
+        )
+        results = _run_server_phase(server_name, url, plan, timeout_s, rng)
+        all_results.extend(results)
+        LOG.info(
+            "Fase do servidor '%s' concluida: %d/%d reconstrucoes coletadas.",
+            server_name,
+            len(results),
+            len(plan),
+        )
 
     if not all_results:
         LOG.warning("Nenhum resultado coletado; relatorio nao sera gerado.")
         return
 
-    # Nome do PDF prioriza as configuracoes da execucao; o timestamp vai como
+    # Nome do PDF prioriza a configuracao da execucao; o timestamp vai como
     # sufixo apenas para nao sobrescrever execucoes com a mesma configuracao.
     if sweep_all:
         mode_part = f"todas-{passes}passada{'s' if passes != 1 else ''}"
     else:
-        mode_part = f"aleatorio-{rounds}rodada{'s' if rounds != 1 else ''}"
-    disp_part = "paralelo" if parallel else "serie"
-    config_slug = f"{mode_part}_{disp_part}"
+        mode_part = f"aleatorio-{len(plan)}rodada{'s' if len(plan) != 1 else ''}"
+    config_slug = f"{mode_part}_1servidor-por-vez"
 
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     out_path = os.path.join(report_dir, f"relatorio_{config_slug}_{ts}.pdf")
@@ -414,26 +479,40 @@ def run_rounds(
     LOG.info("Relatorio comparativo gerado em %s", comp_path)
 
 
+def _parse_order(raw: str) -> List[str]:
+    """Interpreta a ordem dos servidores (ex.: 'python,go')."""
+    order = [s.strip().lower() for s in raw.split(",") if s.strip()]
+    invalid = [s for s in order if s not in SERVERS]
+    if invalid:
+        raise argparse.ArgumentTypeError(
+            f"servidor(es) invalido(s): {invalid}. Validos: {list(SERVERS)}"
+        )
+    if not order:
+        raise argparse.ArgumentTypeError("ordem de servidores vazia")
+    return order
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Cliente ICSM31 — reconstrucao de imagens",
+        description="Cliente ICSM31 — reconstrucao de imagens (um servidor por vez)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Exemplos:\n"
-            "  client.py                      # padrao: 10 rodadas aleatorias, paralelo\n"
+            "  client.py                      # 5 rodadas aleatorias\n"
             "  client.py --rounds 20          # 20 rodadas aleatorias\n"
             "  client.py --all                # percorre TODAS as combinacoes 1 vez\n"
             "  client.py --all --passes 3     # percorre TODAS as combinacoes 3 vezes\n"
-            "  client.py --serie              # envia aos 2 servidores em serie\n"
-            "\nEm qualquer modo cada job vai para os 2 servidores, entao o numero\n"
-            "de imagens geradas e o dobro do numero de jobs."
+            "  client.py --order go,python    # inverte a ordem dos servidores\n"
+            "\nO mesmo plano de rodadas e executado contra cada servidor, UM DE\n"
+            "CADA VEZ. Entre servidores o cliente pausa e pede a troca — eles\n"
+            "nunca rodam em paralelo."
         ),
     )
     parser.add_argument(
         "--rounds",
         type=int,
         default=5,
-        help="modo aleatorio: numero de rodadas (default 10)",
+        help="modo aleatorio: numero de rodadas (default 5)",
     )
     parser.add_argument(
         "--all",
@@ -447,10 +526,10 @@ def main() -> int:
         help="com --all: quantas vezes percorrer todas as combinacoes (default 1)",
     )
     parser.add_argument(
-        "--serie",
-        action="store_true",
-        help="envia a cada servidor em serie (Python, espera, depois Go); "
-        "sem a flag, envia aos 2 em paralelo (padrao)",
+        "--order",
+        type=_parse_order,
+        default="python,go",
+        help="ordem dos servidores, separados por virgula (default: python,go)",
     )
     parser.add_argument(
         "--data-dir",
@@ -465,6 +544,10 @@ def main() -> int:
     parser.add_argument("--timeout", type=float, default=300.0, help="timeout HTTP em segundos")
     parser.add_argument("--seed", type=int, default=None, help="seed do RNG (opcional)")
     args = parser.parse_args()
+
+    # argparse aplica _parse_order tanto no valor do usuario quanto no default
+    # (string); este guard cobre os dois casos com seguranca.
+    order = args.order if isinstance(args.order, list) else _parse_order(args.order)
 
     if not os.path.isdir(args.data_dir):
         LOG.error("Diretorio de dados nao existe: %s", args.data_dir)
@@ -481,10 +564,10 @@ def main() -> int:
         report_dir=args.report_dir,
         timeout_s=args.timeout,
         seed=args.seed,
+        order=order,
         sweep_all=args.all,
         rounds=args.rounds,
         passes=args.passes,
-        parallel=not args.serie,
     )
     return 0
 

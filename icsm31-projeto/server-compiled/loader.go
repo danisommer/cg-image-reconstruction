@@ -1,8 +1,7 @@
-// Package main — Carregamento da matriz H a partir de arquivo CSV.
+// Package main — Carregamento da matriz H a partir de arquivo CSV, em Go puro.
 //
 // O servidor Go le a matriz H em formato CSV (linhas = sensores,
-// colunas = pixels). Em producao, este loader pode ser estendido para
-// suportar formatos binarios (.bin) para acelerar a inicializacao.
+// colunas = pixels) e a guarda numa Matrix densa (ver linalg.go), sem gonum.
 package main
 
 import (
@@ -13,17 +12,15 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-
-	"gonum.org/v1/gonum/mat"
 )
 
 var (
-	hCache   = make(map[string]*mat.Dense)
+	hCache   = make(map[string]*Matrix)
 	hCacheMu sync.RWMutex
 )
 
 // LoadH carrega a matriz H de um arquivo CSV (com cache em memoria).
-func LoadH(path string) (*mat.Dense, error) {
+func LoadH(path string) (*Matrix, error) {
 	hCacheMu.RLock()
 	if H, ok := hCache[path]; ok {
 		hCacheMu.RUnlock()
@@ -37,13 +34,14 @@ func LoadH(path string) (*mat.Dense, error) {
 	}
 	defer f.Close()
 
-	var rows [][]float64
 	scanner := bufio.NewScanner(f)
 	// matrizes grandes — buffer generoso
 	buf := make([]byte, 0, 1024*1024)
 	scanner.Buffer(buf, 64*1024*1024)
 
+	var flat []float64
 	cols := -1
+	rowCount := 0
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" {
@@ -52,40 +50,34 @@ func LoadH(path string) (*mat.Dense, error) {
 		fields := strings.FieldsFunc(line, func(r rune) bool {
 			return r == ',' || r == ' ' || r == '\t' || r == ';'
 		})
-		row := make([]float64, len(fields))
-		for i, s := range fields {
+		if cols == -1 {
+			cols = len(fields)
+		} else if len(fields) != cols {
+			return nil, fmt.Errorf("colunas inconsistentes na linha %d: %d != %d",
+				rowCount+1, len(fields), cols)
+		}
+		for _, s := range fields {
 			v, err := strconv.ParseFloat(s, 64)
 			if err != nil {
-				return nil, fmt.Errorf("parse '%s' linha %d: %w", s, len(rows)+1, err)
+				return nil, fmt.Errorf("parse '%s' linha %d: %w", s, rowCount+1, err)
 			}
-			row[i] = v
+			flat = append(flat, v)
 		}
-		if cols == -1 {
-			cols = len(row)
-		} else if len(row) != cols {
-			return nil, fmt.Errorf("colunas inconsistentes na linha %d: %d != %d",
-				len(rows)+1, len(row), cols)
-		}
-		rows = append(rows, row)
+		rowCount++
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("leitura: %w", err)
 	}
-	if len(rows) == 0 {
+	if rowCount == 0 {
 		return nil, fmt.Errorf("arquivo vazio: %s", path)
 	}
 
-	flat := make([]float64, 0, len(rows)*cols)
-	for _, r := range rows {
-		flat = append(flat, r...)
-	}
-	H := mat.NewDense(len(rows), cols, flat)
+	H := NewMatrix(rowCount, cols, flat)
 
 	hCacheMu.Lock()
 	hCache[path] = H
 	hCacheMu.Unlock()
 
-	r, c := H.Dims()
-	log.Printf("Matriz H carregada de %s, shape=(%d, %d)", path, r, c)
+	log.Printf("Matriz H carregada de %s, shape=(%d, %d)", path, H.Rows, H.Cols)
 	return H, nil
 }

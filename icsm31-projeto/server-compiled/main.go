@@ -42,8 +42,6 @@ import (
 	"os"
 	"strings"
 	"time"
-
-	"gonum.org/v1/gonum/mat"
 )
 
 type modelConfig struct {
@@ -130,16 +128,15 @@ func addPNGText(pngBytes []byte, texts []textPair) []byte {
 	return out
 }
 
-func vectorToPNG(f *mat.VecDense, width, height int, texts []textPair) ([]byte, error) {
-	n := f.Len()
+func vectorToPNG(f []float64, width, height int, texts []textPair) ([]byte, error) {
+	n := len(f)
 	if n != width*height {
 		return nil, fmt.Errorf("dimensao incorreta: %d != %d*%d", n, width, height)
 	}
 
 	// normaliza para [0, 255]
 	minV, maxV := math.Inf(1), math.Inf(-1)
-	for i := 0; i < n; i++ {
-		v := f.AtVec(i)
+	for _, v := range f {
 		if v < minV {
 			minV = v
 		}
@@ -153,11 +150,11 @@ func vectorToPNG(f *mat.VecDense, width, height int, texts []textPair) ([]byte, 
 	}
 
 	img := image.NewGray(image.Rect(0, 0, width, height))
-	// reshape column-major (compatibilidade com NumPy 'F')
+	// reshape column-major (ordem Fortran 'F'): pixel(x, y) = f[x*height + y]
 	for y := 0; y < height; y++ {
 		for x := 0; x < width; x++ {
 			idx := x*height + y
-			v := (f.AtVec(idx) - minV) / span * 255.0
+			v := (f[idx] - minV) / span * 255.0
 			if v < 0 {
 				v = 0
 			} else if v > 255 {
@@ -174,7 +171,7 @@ func vectorToPNG(f *mat.VecDense, width, height int, texts []textPair) ([]byte, 
 	return addPNGText(buf.Bytes(), texts), nil
 }
 
-func denseFromRows(rows [][]float64) (*mat.Dense, error) {
+func matrixFromRows(rows [][]float64) (*Matrix, error) {
 	if len(rows) == 0 {
 		return nil, fmt.Errorf("matriz vazia")
 	}
@@ -186,7 +183,7 @@ func denseFromRows(rows [][]float64) (*mat.Dense, error) {
 		}
 		flat = append(flat, r...)
 	}
-	return mat.NewDense(len(rows), cols, flat), nil
+	return NewMatrix(len(rows), cols, flat), nil
 }
 
 func defaultHPath(model int) string {
@@ -228,13 +225,13 @@ func reconstructHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "campo 'g' ausente", http.StatusBadRequest)
 		return
 	}
-	g := mat.NewVecDense(len(req.G), append([]float64(nil), req.G...))
+	g := append([]float64(nil), req.G...)
 
-	var H *mat.Dense
+	var H *Matrix
 	var hKey string
 	switch {
 	case len(req.H) > 0:
-		d, err := denseFromRows(req.H)
+		d, err := matrixFromRows(req.H)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -275,7 +272,7 @@ func reconstructHandler(w http.ResponseWriter, r *http.Request) {
 	started := time.Now().UTC()
 
 	var (
-		f     *mat.VecDense
+		f     []float64
 		nIter int
 		dur   time.Duration
 	)

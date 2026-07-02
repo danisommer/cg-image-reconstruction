@@ -1,4 +1,5 @@
-numpy>=1.24
-scipy>=1.10
+# Os calculos numericos (algebra linear da reconstrucao) sao feitos em
+# Python puro, no proprio codigo — nao ha numpy/scipy. As dependencias abaixo
+# cobrem apenas a infraestrutura: servidor HTTP e serializacao de imagem PNG.
 Pillow>=10.0
 flask>=2.3

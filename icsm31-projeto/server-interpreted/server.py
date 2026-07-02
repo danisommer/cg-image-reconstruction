@@ -33,14 +33,14 @@ import logging
 import os
 import sys
 from datetime import datetime, timezone
-from typing import Optional
+from typing import List, Optional, Sequence
 
-import numpy as np
 from flask import Flask, jsonify, request
 from PIL import Image, PngImagePlugin
 
 from cgne import cgne
 from cgnr import cgnr
+from linalg import Matrix, load_matrix_csv
 from params import reduction_factor, regularization_lambda
 from signal_gain import apply_signal_gain
 
@@ -57,39 +57,65 @@ MODEL_CONFIG = {
     2: {"S": 436, "N": 64, "size": (30, 30)},
 }
 
-H_CACHE: dict[str, np.ndarray] = {}
+H_CACHE: dict[str, Matrix] = {}
 
 
-def _load_H(path: str) -> np.ndarray:
-    """Carrega matriz H de arquivo .npy ou texto (com cache em memoria)."""
+def _load_H(path: str) -> Matrix:
+    """Carrega matriz H de arquivo CSV/texto em Python puro (com cache em memoria)."""
     if path in H_CACHE:
         return H_CACHE[path]
     if not os.path.exists(path):
         raise FileNotFoundError(f"Matriz H nao encontrada: {path}")
 
-    if path.endswith(".npy"):
-        H = np.load(path)
-    elif path.endswith(".csv"):
-        H = np.loadtxt(path, delimiter=",", dtype=np.float64)
-    else:
-        H = np.loadtxt(path, dtype=np.float64)
+    H = load_matrix_csv(path)
 
     H_CACHE[path] = H
     LOG.info("Matriz H carregada de %s, shape=%s", path, H.shape)
     return H
 
 
-def _vector_to_png(
-    f: np.ndarray, width: int, height: int, metadata: dict
-) -> bytes:
-    """Converte um vetor reconstruido em um PNG (com metadados tEXt)."""
-    arr = np.asarray(f, dtype=np.float64).reshape((height, width), order="F")
-    arr = arr - arr.min()
-    if arr.max() > 0:
-        arr = arr / arr.max()
-    arr = (arr * 255.0).clip(0, 255).astype(np.uint8)
+def _matrix_from_rows(rows: Sequence[Sequence[float]]) -> Matrix:
+    """Constroi uma Matrix (linalg) a partir de uma lista de linhas (payload JSON)."""
+    from array import array
 
-    img = Image.fromarray(arr, mode="L")
+    data = array("d")
+    n_rows = 0
+    n_cols = 0
+    for row in rows:
+        values = [float(v) for v in row]
+        if n_cols == 0:
+            n_cols = len(values)
+        data.extend(values)
+        n_rows += 1
+    return Matrix(data, n_rows, n_cols)
+
+
+def _vector_to_png(
+    f: Sequence[float], width: int, height: int, metadata: dict
+) -> bytes:
+    """Converte um vetor reconstruido em um PNG (com metadados tEXt).
+
+    A normalizacao (min-max para 0..255) e feita em Python puro; o Pillow e
+    usado apenas para serializar o PNG e gravar os metadados tEXt.
+    """
+    # O vetor f esta em ordem coluna-a-coluna para a imagem (height, width):
+    #   pixel(x, y) = f[y + x * height]
+    fmin = min(f)
+    span = max(f) - fmin
+    scale = 255.0 / span if span > 0 else 0.0
+
+    pixels = bytearray(width * height)
+    for y in range(height):
+        row_off = y * width
+        for x in range(width):
+            val = (f[y + x * height] - fmin) * scale
+            if val < 0.0:
+                val = 0.0
+            elif val > 255.0:
+                val = 255.0
+            pixels[row_off + x] = int(val)
+
+    img = Image.frombytes("L", (width, height), bytes(pixels))
 
     info = PngImagePlugin.PngInfo()
     for k, v in metadata.items():
@@ -122,12 +148,12 @@ def reconstruct() -> tuple:
     g_raw = payload.get("g")
     if g_raw is None:
         return jsonify({"error": "campo 'g' ausente"}), 400
-    g = np.asarray(g_raw, dtype=np.float64).ravel()
+    g: List[float] = [float(x) for x in g_raw]
 
-    H: Optional[np.ndarray] = None
+    H: Optional[Matrix] = None
     h_key: Optional[str] = None
     if "H" in payload and payload["H"] is not None:
-        H = np.asarray(payload["H"], dtype=np.float64)
+        H = _matrix_from_rows(payload["H"])
     elif "H_path" in payload and payload["H_path"]:
         h_key = payload["H_path"]
         H = _load_H(h_key)
@@ -135,9 +161,7 @@ def reconstruct() -> tuple:
         default_path = os.environ.get(f"H_MODEL_{model}_PATH")
         if not default_path:
             for cand in (
-                os.path.join("data", f"H-{model}.npy"),
                 os.path.join("data", f"H-{model}.csv"),
-                os.path.join("data", f"H_modelo_{model}.npy"),
                 os.path.join("data", f"H_modelo_{model}.csv"),
             ):
                 if os.path.exists(cand):

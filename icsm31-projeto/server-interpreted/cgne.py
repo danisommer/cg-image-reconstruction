@@ -1,5 +1,7 @@
 """
-CGNE — Conjugate Gradient Normal Error.
+CGNE — Conjugate Gradient Normal Error (Python puro, sem numpy).
+
+Toda a algebra linear e feita no proprio codigo, via o modulo `linalg`.
 
 Algoritmo:
     f0 = 0
@@ -16,59 +18,58 @@ Algoritmo:
 from __future__ import annotations
 
 import time
-from typing import Tuple
+from typing import List, Sequence, Tuple
 
-import numpy as np
+from linalg import Matrix, axpy, dot
 
 
 def cgne(
-    H: np.ndarray,
-    g: np.ndarray,
+    H: Matrix,
+    g: Sequence[float],
     max_iter: int = 10,
     tol: float = 1e-4,
-) -> Tuple[np.ndarray, int, float]:
+) -> Tuple[List[float], int, float]:
     """Reconstrucao por Conjugate Gradient Normal Error.
 
     Args:
-        H: matriz de modelo, shape (S, M).
-        g: vetor de sinal, shape (S,).
+        H: matriz de modelo (linalg.Matrix), shape (S, M).
+        g: vetor de sinal, tamanho S.
         max_iter: numero maximo de iteracoes (default 10).
         tol: tolerancia para o criterio de parada |epsilon| (default 1e-4).
 
     Returns:
-        f: vetor da imagem reconstruida, shape (M,).
+        f: vetor da imagem reconstruida, tamanho M.
         n_iter: numero de iteracoes efetivamente executadas.
         tempo_total: duracao da reconstrucao em segundos.
     """
     t0 = time.perf_counter()
 
-    H = np.asarray(H, dtype=np.float64)
-    g = np.asarray(g, dtype=np.float64).ravel()
+    m = H.cols
 
-    m = H.shape[1]
+    f = [0.0] * m
+    # r0 = g - H*f0 = g (pois f0 = 0)
+    r = list(g)
+    p = H.rmatvec(r)
 
-    f = np.zeros(m, dtype=np.float64)
-    r = g - H @ f
-    p = H.T @ r
-
-    r_norm_sq = float(r @ r)
-    prev_r_norm = float(np.sqrt(r_norm_sq))
+    r_norm_sq = dot(r, r)
+    prev_r_norm = r_norm_sq ** 0.5
 
     n_iter = 0
     for i in range(max_iter):
         n_iter = i + 1
 
-        p_norm_sq = float(p @ p)
+        p_norm_sq = dot(p, p)
         if p_norm_sq == 0.0:
             break
 
         alpha = r_norm_sq / p_norm_sq
 
-        f = f + alpha * p
-        r = r - alpha * (H @ p)
+        f = axpy(alpha, p, f)
+        Hp = H.matvec(p)
+        r = axpy(-alpha, Hp, r)
 
-        new_r_norm_sq = float(r @ r)
-        new_r_norm = float(np.sqrt(new_r_norm_sq))
+        new_r_norm_sq = dot(r, r)
+        new_r_norm = new_r_norm_sq ** 0.5
 
         epsilon = new_r_norm - prev_r_norm
         if abs(epsilon) < tol:
@@ -79,7 +80,7 @@ def cgne(
             break
         beta = new_r_norm_sq / r_norm_sq
 
-        p = H.T @ r + beta * p
+        p = axpy(beta, p, H.rmatvec(r))  # p = H^T r + beta * p
         r_norm_sq = new_r_norm_sq
 
     tempo_total = time.perf_counter() - t0

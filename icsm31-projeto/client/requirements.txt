@@ -1,4 +1,6 @@
-numpy>=1.24
+# O cliente nao faz calculos numericos (apenas carrega sinais, envia via HTTP
+# e monta o relatorio), entao nao depende de numpy. As dependencias abaixo
+# cobrem HTTP, manipulacao de imagem e geracao do PDF.
 requests>=2.31
 Pillow>=10.0
 reportlab>=4.0
