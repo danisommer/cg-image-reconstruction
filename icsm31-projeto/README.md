@@ -4,20 +4,24 @@ Desenvolvimento Integrado de Sistemas — UTFPR.
 
 O projeto reconstrói imagens a partir de sinais `g` usando os algoritmos
 iterativos **CGNR** e **CGNE**, comparando **duas implementações de servidor**:
-uma interpretada e não fortemente tipada (**Python/Flask**) e outra compilada e
+uma interpretada e não fortemente tipada (**Python**) e outra compilada e
 fortemente tipada (**Go**). Um cliente único envia a **mesma** sequência de
 sinais para os dois servidores e gera os relatórios finais.
 
 Toda a álgebra linear (produto matriz-vetor, normas, iteração de potência,
 `sqrt`/`abs`) é implementada no próprio código, sem numpy/scipy nem bibliotecas
-numéricas externas, nos dois servidores.
+numéricas externas, nos dois servidores. **Ambos os servidores usam apenas a
+biblioteca padrão da sua linguagem** — inclusive o servidor HTTP e a geração do
+PNG (o Python usa `http.server` + `zlib`; o Go usa `net/http` + `image/png`).
+As únicas dependências de terceiros do projeto estão no cliente e servem só para
+o relatório e o transporte HTTP (`reportlab`, `requests`).
 
 ## Estrutura
 
 | Pasta | Papel |
 |-------|-------|
 | [client/](client/) | Cliente: envia os sinais e gera os relatórios PDF |
-| [server-interpreted/](server-interpreted/) | Servidor **interpretado / fracamente tipado** (Python + Flask), porta 5001 |
+| [server-interpreted/](server-interpreted/) | Servidor **interpretado / fracamente tipado** (Python, só biblioteca padrão), porta 5001 |
 | [server-compiled/](server-compiled/) | Servidor **compilado / fortemente tipado** (Go), porta 5002 |
 | [data/](data/) | Matrizes `H` e sinais `g` de teste (padrões do professor) |
 | `reports/` | Saída dos relatórios PDF (gerada em tempo de execução) |
@@ -33,14 +37,14 @@ JSON da resposta. Ambos os servidores produzem o mesmo conjunto de campos.
 
 | Dado exigido | Versão interpretada (Python) | Versão compilada (Go) |
 |--------------|------------------------------|-----------------------|
-| Identificação do algoritmo | [`server.py:176`](server-interpreted/server.py#L176) (`"algorithm"`) | [`main.go:256`](server-compiled/main.go#L256) (`"algorithm"`) |
-| Data/hora de **início** da reconstrução | [`server.py:164,177`](server-interpreted/server.py#L164) (`started_at`) | [`main.go:236,257`](server-compiled/main.go#L236) (`started_at`) |
-| Data/hora de **término** da reconstrução | [`server.py:173,178`](server-interpreted/server.py#L173) (`finished_at`) | [`main.go:253,258`](server-compiled/main.go#L253) (`finished_at`) |
-| Tamanho em pixels | [`server.py:179`](server-interpreted/server.py#L179) (`"size"`) | [`main.go:259`](server-compiled/main.go#L259) (`"size"`) |
-| Número de iterações executadas | [`server.py:180`](server-interpreted/server.py#L180) (`"iterations"`) | [`main.go:260`](server-compiled/main.go#L260) (`"iterations"`) |
+| Identificação do algoritmo | [`server.py:222`](server-interpreted/server.py#L222) (`"algorithm"`) | [`main.go:256`](server-compiled/main.go#L256) (`"algorithm"`) |
+| Data/hora de **início** da reconstrução | [`server.py:210,223`](server-interpreted/server.py#L210) (`started_at`) | [`main.go:236,257`](server-compiled/main.go#L236) (`started_at`) |
+| Data/hora de **término** da reconstrução | [`server.py:219,224`](server-interpreted/server.py#L219) (`finished_at`) | [`main.go:253,258`](server-compiled/main.go#L253) (`finished_at`) |
+| Tamanho em pixels | [`server.py:225`](server-interpreted/server.py#L225) (`"size"`) | [`main.go:259`](server-compiled/main.go#L259) (`"size"`) |
+| Número de iterações executadas | [`server.py:226`](server-interpreted/server.py#L226) (`"iterations"`) | [`main.go:260`](server-compiled/main.go#L260) (`"iterations"`) |
 
-- Montagem do bloco de metadados: [`server.py:175-184`](server-interpreted/server.py#L175-L184) / [`main.go:255-264`](server-compiled/main.go#L255-L264)
-- Gravação dos metadados no PNG: [`_vector_to_png` — server.py:100-106](server-interpreted/server.py#L100-L106) / [`addPNGText` — main.go:88-126](server-compiled/main.go#L88-L126)
+- Montagem do bloco de metadados: [`server.py:221-230`](server-interpreted/server.py#L221-L230) / [`main.go:255-264`](server-compiled/main.go#L255-L264)
+- Gravação dos metadados no PNG (encoder próprio, sem Pillow): [`_encode_png_gray` — server.py:100-121](server-interpreted/server.py#L100-L121) / [`addPNGText` — main.go:88-126](server-compiled/main.go#L88-L126)
 
 ### Cliente
 
@@ -60,27 +64,27 @@ Aplicação única em [client/client.py](client/client.py).
 
 | Requisito | Onde está |
 |-----------|-----------|
-| Versão em **linguagem interpretada e não fortemente tipada** | [server-interpreted/](server-interpreted/) — Python + Flask ([`server.py`](server-interpreted/server.py)) |
-| Versão em **linguagem compilada e fortemente tipada** | [server-compiled/](server-compiled/) — Go ([`main.go`](server-compiled/main.go)) |
-| **Executar o algoritmo de reconstrução** | CGNR: [`cgnr.py`](server-interpreted/cgnr.py) / [`cgnr.go`](server-compiled/cgnr.go) · CGNE: [`cgne.py`](server-interpreted/cgne.py) / [`cgne.go`](server-compiled/cgne.go). Despacho em [`server.py:166-171`](server-interpreted/server.py#L166-L171) / [`main.go:243-251`](server-compiled/main.go#L243-L251) |
+| Versão em **linguagem interpretada e não fortemente tipada** | [server-interpreted/](server-interpreted/) — Python, só stdlib ([`server.py`](server-interpreted/server.py)) |
+| Versão em **linguagem compilada e fortemente tipada** | [server-compiled/](server-compiled/) — Go, só stdlib ([`main.go`](server-compiled/main.go)) |
+| **Executar o algoritmo de reconstrução** | CGNR: [`cgnr.py`](server-interpreted/cgnr.py) / [`cgnr.go`](server-compiled/cgnr.go) · CGNE: [`cgne.py`](server-interpreted/cgne.py) / [`cgne.go`](server-compiled/cgne.go). Despacho em [`server.py:212-217`](server-interpreted/server.py#L212-L217) / [`main.go:243-251`](server-compiled/main.go#L243-L251) |
 | **Parar quando ε < 1e-4 ou nº de iterações = 10** | Python: `max_iter=10`, `tol=1e-4` ([`cgnr.py:37-38`](server-interpreted/cgnr.py#L37-L38), critério em [`cgnr.py:82`](server-interpreted/cgnr.py#L82); idem [`cgne.py:74-77`](server-interpreted/cgne.py#L74-L77)). Go: `CGNR(H, g, 10, 1e-4)` em [`main.go:245-247`](server-compiled/main.go#L245-L247), critério em [`cgnr.go:71`](server-compiled/cgnr.go#L71) |
 | **Relatório comparativo** entre as duas versões | [client/comparative_report.py](client/comparative_report.py) — tempos por algoritmo/modelo/servidor ([`_timings_rows:63`](client/comparative_report.py#L63)), speedup ([`_speedup_text:131`](client/comparative_report.py#L131)). Chamado em [`client.py:467-471`](client/client.py#L467-L471) |
 | Objetivo: **mais reconstruções no menor tempo** | Métrica de **throughput** (rec/s) em [`_throughput_rows` — comparative_report.py:99-128](client/comparative_report.py#L99-L128) |
 
 Detalhes auxiliares dos servidores:
 
-- Ganho de sinal `γ_l = 100 + (1/20)·l·√l`: [`signal_gain.py`](server-interpreted/signal_gain.py) / [`signal_gain.go`](server-compiled/signal_gain.go), aplicado em [`server.py:153-157`](server-interpreted/server.py#L153-L157) / [`main.go:222-228`](server-compiled/main.go#L222-L228).
-- Parâmetros do enunciado `c = ‖HᵀH‖₂` e `λ = max(|Hᵀg|)·0,10`: [`params.py`](server-interpreted/params.py) / [`params.go`](server-compiled/params.go), calculados em [`server.py:161-162`](server-interpreted/server.py#L161-L162) / [`main.go:232-233`](server-compiled/main.go#L232-L233).
-- Carregamento da matriz `H` (sem cache, recalculada a cada requisição): [`_load_H` — server.py:59-70](server-interpreted/server.py#L59-L70) / [`LoadH` — loader.go:20](server-compiled/loader.go#L20).
+- Ganho de sinal `γ_l = 100 + (1/20)·l·√l`: [`signal_gain.py`](server-interpreted/signal_gain.py) / [`signal_gain.go`](server-compiled/signal_gain.go), aplicado em [`server.py:199-201`](server-interpreted/server.py#L199-L201) / [`main.go:222-228`](server-compiled/main.go#L222-L228).
+- Parâmetros do enunciado `c = ‖HᵀH‖₂` e `λ = max(|Hᵀg|)·0,10`: [`params.py`](server-interpreted/params.py) / [`params.go`](server-compiled/params.go), calculados em [`server.py:207-208`](server-interpreted/server.py#L207-L208) / [`main.go:232-233`](server-compiled/main.go#L232-L233).
+- Carregamento da matriz `H` (sem cache, recalculada a cada requisição): [`_load_H` — server.py:65-76](server-interpreted/server.py#L65-L76) / [`LoadH` — loader.go:20](server-compiled/loader.go#L20).
+- Servidor HTTP e encoder PNG, ambos só com a stdlib: [`ReconstructHandler` — server.py:260-300](server-interpreted/server.py#L260-L300) / [`main.go`](server-compiled/main.go).
 
 ---
 
 ## Como executar
 
 ```bash
-# 1) Servidor interpretado (porta 5001)
+# 1) Servidor interpretado (porta 5001) — só stdlib, sem pip install
 cd server-interpreted
-pip install -r requirements.txt
 python server.py
 
 # 2) Servidor compilado (porta 5002) — SUBIR SÓ APÓS DERRUBAR O PYTHON

@@ -1,5 +1,9 @@
-# Os calculos numericos (algebra linear da reconstrucao) sao feitos em
-# Python puro, no proprio codigo — nao ha numpy/scipy. As dependencias abaixo
-# cobrem apenas a infraestrutura: servidor HTTP e serializacao de imagem PNG.
-Pillow>=10.0
-flask>=2.3
+# Sem dependencias de terceiros.
+#
+# O servidor interpretado usa APENAS a biblioteca padrao do Python:
+#   - http.server  -> servidor HTTP (substitui o Flask)
+#   - zlib/struct  -> geracao do PNG a mao, com chunks tEXt (substitui o Pillow)
+# Toda a algebra linear da reconstrucao ja e implementada no proprio codigo
+# (modulo linalg), sem numpy/scipy.
+#
+# Basta um interpretador Python 3.8+ para rodar: `python server.py`.
