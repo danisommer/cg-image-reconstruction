@@ -7,7 +7,6 @@
 //	    Body JSON:
 //	      {
 //	        "g": [...],              // vetor de sinal
-//	        "H": [[...], ...],       // opcional — matriz de modelo
 //	        "H_path": "...",         // opcional — caminho local p/ matriz
 //	        "algorithm": "cgnr"|"cgne",
 //	        "model": 1 | 2,
@@ -54,12 +53,11 @@ var modelConfigs = map[int]modelConfig{
 }
 
 type reconstructRequest struct {
-	G         []float64   `json:"g"`
-	H         [][]float64 `json:"H,omitempty"`
-	HPath     string      `json:"H_path,omitempty"`
-	Algorithm string      `json:"algorithm"`
-	Model     int         `json:"model"`
-	ApplyGain *bool       `json:"apply_gain,omitempty"`
+	G         []float64 `json:"g"`
+	HPath     string    `json:"H_path,omitempty"`
+	Algorithm string    `json:"algorithm"`
+	Model     int       `json:"model"`
+	ApplyGain *bool     `json:"apply_gain,omitempty"`
 }
 
 type reconstructResponse struct {
@@ -171,21 +169,6 @@ func vectorToPNG(f []float64, width, height int, texts []textPair) ([]byte, erro
 	return addPNGText(buf.Bytes(), texts), nil
 }
 
-func matrixFromRows(rows [][]float64) (*Matrix, error) {
-	if len(rows) == 0 {
-		return nil, fmt.Errorf("matriz vazia")
-	}
-	cols := len(rows[0])
-	flat := make([]float64, 0, len(rows)*cols)
-	for i, r := range rows {
-		if len(r) != cols {
-			return nil, fmt.Errorf("linha %d tem %d colunas, esperado %d", i, len(r), cols)
-		}
-		flat = append(flat, r...)
-	}
-	return NewMatrix(len(rows), cols, flat), nil
-}
-
 func defaultHPath(model int) string {
 	if env := os.Getenv(fmt.Sprintf("H_MODEL_%d_PATH", model)); env != "" {
 		return env
@@ -230,13 +213,6 @@ func reconstructHandler(w http.ResponseWriter, r *http.Request) {
 	var H *Matrix
 	var hKey string
 	switch {
-	case len(req.H) > 0:
-		d, err := matrixFromRows(req.H)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		H = d
 	case req.HPath != "":
 		hKey = req.HPath
 		d, err := LoadH(hKey)

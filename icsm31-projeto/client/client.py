@@ -4,9 +4,8 @@ resultados.
 
 Comportamento:
     1. Carrega matrizes H e sinais g do diretorio data/.
-    2. Monta os jobs conforme o modo:
-         - aleatorio (padrao): sorteia algoritmo (cgnr/cgne) e sinal a cada rodada;
-         - percorrer todas (--all): cada algoritmo x cada sinal, repetido --passes vezes.
+    2. Monta as rodadas sorteando algoritmo (cgnr/cgne) e sinal a cada rodada
+       (o sinal fixa modelo e ganho aleatoriamente).
     3. Executa TODAS as rodadas contra o PRIMEIRO servidor (sequencialmente).
     4. Entra em modo de espera e pede ao usuario para DERRUBAR o primeiro
        servidor e SUBIR o segundo (os servidores NUNCA rodam em paralelo).
@@ -17,9 +16,6 @@ Comportamento:
 Uso:
     python client/client.py                       # 5 rodadas aleatorias
     python client/client.py --rounds 20           # 20 rodadas aleatorias
-    python client/client.py --all                 # percorre todas as combinacoes 1 vez
-    python client/client.py --all --passes 3      # percorre todas as combinacoes 3 vezes
-    python client/client.py --order go,python     # inverte a ordem dos servidores
 """
 
 from __future__ import annotations
@@ -85,6 +81,10 @@ _SERVER_LABEL = {
     "python": "Python (interpretado, porta 5001)",
     "go": "Go (compilado, porta 5002)",
 }
+
+# Ordem fixa: interpretado (Python) e depois compilado (Go). Os servidores
+# nunca rodam em paralelo — o cliente pausa e pede a troca entre as fases.
+SERVER_ORDER = ["python", "go"]
 
 MODEL_CONFIG = {
     1: {"S": 794, "N": 64, "size": (60, 60)},
@@ -249,39 +249,19 @@ def _send_one(
 
 def _build_jobs(
     signal_pool: List[SignalFile],
-    sweep_all: bool,
     rounds: int,
-    passes: int,
     rng: random.Random,
 ) -> List[Tuple[str, SignalFile]]:
-    """Monta a lista de jobs (algoritmo, sinal) conforme o modo escolhido.
+    """Monta a lista de jobs (algoritmo, sinal) sorteando a cada rodada.
 
-    - Modo aleatorio: `rounds` jobs, cada um sorteando algoritmo e sinal.
-    - Modo "percorrer todas": todas as combinacoes (cgnr/cgne x cada sinal),
-      repetidas `passes` vezes.
-
-    A lista de jobs e fixa (montada uma unica vez) e depois reproduzida
+    Cada job sorteia o algoritmo (cgnr/cgne) e o sinal (o que define modelo e
+    ganho aleatoriamente). A lista e montada uma unica vez e depois reproduzida
     identicamente em cada servidor — garantindo comparacao justa.
     """
-    if sweep_all:
-        jobs: List[Tuple[str, SignalFile]] = []
-        for _ in range(passes):
-            for algorithm in ("cgnr", "cgne"):
-                for signal in signal_pool:
-                    jobs.append((algorithm, signal))
-        LOG.info(
-            "Modo: PERCORRER TODAS — %d sinais x 2 algoritmos x %d passada(s) = "
-            "%d rodadas por servidor",
-            len(signal_pool),
-            passes,
-            len(jobs),
-        )
-        return jobs
-
     jobs = [
         (rng.choice(["cgnr", "cgne"]), rng.choice(signal_pool)) for _ in range(rounds)
     ]
-    LOG.info("Modo: ALEATORIO — %d rodada(s) por servidor", rounds)
+    LOG.info("%d rodada(s) aleatoria(s) por servidor", rounds)
     return jobs
 
 
@@ -404,24 +384,21 @@ def run_rounds(
     report_dir: str,
     timeout_s: float,
     seed: Optional[int],
-    order: List[str],
-    sweep_all: bool,
     rounds: int,
-    passes: int,
 ) -> None:
     rng = random.Random(seed)
+    order = SERVER_ORDER
 
     os.makedirs(report_dir, exist_ok=True)
 
     # Pool global de sinais: cobre os dois modelos (1 e 2) e os dois tipos de
-    # ganho (aplicar ou nao). No modo aleatorio sorteia-se daqui; no modo
-    # "percorrer todas" usam-se todos.
+    # ganho (aplicar ou nao). A cada rodada sorteia-se um sinal deste pool.
     signal_pool = _discover_all_signals(data_dir)
     if not signal_pool:
         LOG.error("Nenhum sinal encontrado em %s — nada a fazer.", data_dir)
         return
 
-    jobs = _build_jobs(signal_pool, sweep_all, rounds, passes, rng)
+    jobs = _build_jobs(signal_pool, rounds, rng)
     plan = _build_plan(jobs, data_dir)
     if not plan:
         LOG.error("Nenhuma rodada valida montada — nada a fazer.")
@@ -461,11 +438,10 @@ def run_rounds(
 
     # Nome do PDF prioriza a configuracao da execucao; o timestamp vai como
     # sufixo apenas para nao sobrescrever execucoes com a mesma configuracao.
-    if sweep_all:
-        mode_part = f"todas-{passes}passada{'s' if passes != 1 else ''}"
-    else:
-        mode_part = f"aleatorio-{len(plan)}rodada{'s' if len(plan) != 1 else ''}"
-    config_slug = f"{mode_part}_1servidor-por-vez"
+    config_slug = (
+        f"aleatorio-{len(plan)}rodada{'s' if len(plan) != 1 else ''}"
+        "_1servidor-por-vez"
+    )
 
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     out_path = os.path.join(report_dir, f"relatorio_{config_slug}_{ts}.pdf")
@@ -479,19 +455,6 @@ def run_rounds(
     LOG.info("Relatorio comparativo gerado em %s", comp_path)
 
 
-def _parse_order(raw: str) -> List[str]:
-    """Interpreta a ordem dos servidores (ex.: 'python,go')."""
-    order = [s.strip().lower() for s in raw.split(",") if s.strip()]
-    invalid = [s for s in order if s not in SERVERS]
-    if invalid:
-        raise argparse.ArgumentTypeError(
-            f"servidor(es) invalido(s): {invalid}. Validos: {list(SERVERS)}"
-        )
-    if not order:
-        raise argparse.ArgumentTypeError("ordem de servidores vazia")
-    return order
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Cliente ICSM31 — reconstrucao de imagens (um servidor por vez)",
@@ -500,9 +463,6 @@ def main() -> int:
             "Exemplos:\n"
             "  client.py                      # 5 rodadas aleatorias\n"
             "  client.py --rounds 20          # 20 rodadas aleatorias\n"
-            "  client.py --all                # percorre TODAS as combinacoes 1 vez\n"
-            "  client.py --all --passes 3     # percorre TODAS as combinacoes 3 vezes\n"
-            "  client.py --order go,python    # inverte a ordem dos servidores\n"
             "\nO mesmo plano de rodadas e executado contra cada servidor, UM DE\n"
             "CADA VEZ. Entre servidores o cliente pausa e pede a troca — eles\n"
             "nunca rodam em paralelo."
@@ -512,24 +472,7 @@ def main() -> int:
         "--rounds",
         type=int,
         default=5,
-        help="modo aleatorio: numero de rodadas (default 5)",
-    )
-    parser.add_argument(
-        "--all",
-        action="store_true",
-        help="percorre TODAS as combinacoes (algoritmo x sinal) em vez de sortear",
-    )
-    parser.add_argument(
-        "--passes",
-        type=int,
-        default=1,
-        help="com --all: quantas vezes percorrer todas as combinacoes (default 1)",
-    )
-    parser.add_argument(
-        "--order",
-        type=_parse_order,
-        default="python,go",
-        help="ordem dos servidores, separados por virgula (default: python,go)",
+        help="numero de rodadas aleatorias (default 5)",
     )
     parser.add_argument(
         "--data-dir",
@@ -545,18 +488,11 @@ def main() -> int:
     parser.add_argument("--seed", type=int, default=None, help="seed do RNG (opcional)")
     args = parser.parse_args()
 
-    # argparse aplica _parse_order tanto no valor do usuario quanto no default
-    # (string); este guard cobre os dois casos com seguranca.
-    order = args.order if isinstance(args.order, list) else _parse_order(args.order)
-
     if not os.path.isdir(args.data_dir):
         LOG.error("Diretorio de dados nao existe: %s", args.data_dir)
         return 1
     if args.rounds < 1:
         LOG.error("--rounds deve ser >= 1")
-        return 1
-    if args.passes < 1:
-        LOG.error("--passes deve ser >= 1")
         return 1
 
     run_rounds(
@@ -564,10 +500,7 @@ def main() -> int:
         report_dir=args.report_dir,
         timeout_s=args.timeout,
         seed=args.seed,
-        order=order,
-        sweep_all=args.all,
         rounds=args.rounds,
-        passes=args.passes,
     )
     return 0
 

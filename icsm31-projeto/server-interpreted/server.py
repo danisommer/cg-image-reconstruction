@@ -6,7 +6,6 @@ Endpoint:
         Recebe JSON:
             {
                 "g": [...],             # vetor de sinal (lista de floats)
-                "H": [[...], ...],      # opcional — matriz de modelo
                 "H_path": "...",        # opcional — caminho local p/ matriz cacheada
                 "algorithm": "cgnr"|"cgne",
                 "model": 1 | 2,
@@ -74,22 +73,6 @@ def _load_H(path: str) -> Matrix:
     return H
 
 
-def _matrix_from_rows(rows: Sequence[Sequence[float]]) -> Matrix:
-    """Constroi uma Matrix (linalg) a partir de uma lista de linhas (payload JSON)."""
-    from array import array
-
-    data = array("d")
-    n_rows = 0
-    n_cols = 0
-    for row in rows:
-        values = [float(v) for v in row]
-        if n_cols == 0:
-            n_cols = len(values)
-        data.extend(values)
-        n_rows += 1
-    return Matrix(data, n_rows, n_cols)
-
-
 def _vector_to_png(
     f: Sequence[float], width: int, height: int, metadata: dict
 ) -> bytes:
@@ -152,9 +135,7 @@ def reconstruct() -> tuple:
 
     H: Optional[Matrix] = None
     h_key: Optional[str] = None
-    if "H" in payload and payload["H"] is not None:
-        H = _matrix_from_rows(payload["H"])
-    elif "H_path" in payload and payload["H_path"]:
+    if "H_path" in payload and payload["H_path"]:
         h_key = payload["H_path"]
         H = _load_H(h_key)
     else:

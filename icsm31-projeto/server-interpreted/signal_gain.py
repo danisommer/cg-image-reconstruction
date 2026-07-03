@@ -4,7 +4,7 @@ Ganho de sinal aplicado ao vetor g antes da reconstrucao — Python puro.
 Formula:
     for c = 1 .. N:
         for l = 1 .. S:
-            gamma_l = 100 + (1/20) * sqrt(l * l)
+            gamma_l = 100 + (1/20) * l * sqrt(l)
             g[l, c] = g[l, c] * gamma_l
 
 O vetor g chega achatado em ordem coluna-a-coluna (Fortran): o indice plano
@@ -29,8 +29,8 @@ def apply_signal_gain(g: Sequence[float], S: int, N: int) -> List[float]:
     Returns:
         nova lista com o ganho aplicado (mesmo tamanho do input).
     """
-    # gamma_l = 100 + (1/20) * sqrt(l*l), para l = 1..S (raiz via expoente 0.5)
-    gamma = [100.0 + (1.0 / 20.0) * ((l * l) ** 0.5) for l in range(1, S + 1)]
+    # gamma_l = 100 + (1/20) * l * sqrt(l), para l = 1..S (raiz via expoente 0.5)
+    gamma = [100.0 + (1.0 / 20.0) * l * (l ** 0.5) for l in range(1, S + 1)]
 
     n = len(g)
     if n == S * N:
