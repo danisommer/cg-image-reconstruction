@@ -131,6 +131,10 @@ def _fmt_ts(rec: Optional[ReconstructionResult], attr: str) -> str:
     return "n/d" if rec is None else str(getattr(rec, attr))
 
 
+def _fmt_num(rec: Optional[ReconstructionResult], attr: str) -> str:
+    return "n/d" if rec is None else f"{getattr(rec, attr):.6g}"
+
+
 def _compare_table(
     py: Optional[ReconstructionResult],
     go: Optional[ReconstructionResult],
@@ -140,6 +144,8 @@ def _compare_table(
         ["Metrica", "Python (interpretado)", "Go (compilado)"],
         ["Iteracoes", _fmt_iter(py), _fmt_iter(go)],
         ["Tempo (s)", _fmt_time(py), _fmt_time(go)],
+        ["c = ||H^T H||_2", _fmt_num(py, "reduction_factor"), _fmt_num(go, "reduction_factor")],
+        ["lambda", _fmt_num(py, "lambda_reg"), _fmt_num(go, "lambda_reg")],
         ["Inicio", _fmt_ts(py, "started_at"), _fmt_ts(go, "started_at")],
         ["Termino", _fmt_ts(py, "finished_at"), _fmt_ts(go, "finished_at")],
     ]
