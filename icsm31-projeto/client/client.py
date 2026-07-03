@@ -484,7 +484,13 @@ def main() -> int:
         default=DEFAULT_REPORT_DIR,
         help="diretorio de saida (default: <raiz do projeto>/reports)",
     )
-    parser.add_argument("--timeout", type=float, default=300.0, help="timeout HTTP em segundos")
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=1200.0,
+        help="timeout HTTP em segundos (default 1200; a versao interpretada e "
+        "legitimamente mais lenta na 1a requisicao de cada modelo)",
+    )
     parser.add_argument("--seed", type=int, default=None, help="seed do RNG (opcional)")
     args = parser.parse_args()
 

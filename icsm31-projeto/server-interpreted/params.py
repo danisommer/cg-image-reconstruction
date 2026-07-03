@@ -24,8 +24,8 @@ _C_CACHE: dict[str, float] = {}
 def reduction_factor(
     H: Matrix,
     cache_key: Optional[str] = None,
-    max_iter: int = 200,
-    tol: float = 1e-9,
+    max_iter: int = 100,
+    tol: float = 1e-4,
 ) -> float:
     """Calcula c = ||H^T H||_2 (maior autovalor de H^T H) por iteracao de potencia.
 
@@ -35,8 +35,12 @@ def reduction_factor(
     Args:
         H: matriz de modelo (linalg.Matrix), shape (S, M).
         cache_key: chave de cache (ex.: caminho do arquivo de H). Se None, nao cacheia.
-        max_iter: numero maximo de iteracoes de potencia.
-        tol: tolerancia relativa para parada antecipada.
+        max_iter: numero maximo de iteracoes de potencia (limite de seguranca).
+        tol: tolerancia relativa para parada. Para as matrizes H deste projeto
+             o autovalor dominante e pouco separado, entao |dnw|/nw estabiliza
+             em ~1e-4 e nao desce muito abaixo disso; 1e-4 e atingido por volta
+             da iteracao ~30, dando o mesmo c pratico que dezenas de iteracoes
+             extras — apenas muito mais rapido. Mesmo valor no servidor Go.
 
     Returns:
         c: o valor da norma-2 de H^T H (>= 0).

@@ -31,8 +31,12 @@ func ReductionFactor(H *Matrix, cacheKey string) float64 {
 		cCacheMu.RUnlock()
 	}
 
-	const maxIter = 200
-	const tol = 1e-9
+	// Para as matrizes H deste projeto o autovalor dominante e pouco separado,
+	// entao |dnw|/nw estabiliza em ~1e-4 (por volta da iteracao ~30) e nao desce
+	// muito abaixo disso. tol=1e-4 da o mesmo c pratico que centenas de iteracoes,
+	// muito mais rapido. Mesmo criterio do servidor Python -> c consistente.
+	const maxIter = 100
+	const tol = 1e-4
 
 	m := H.Cols
 	v := make([]float64, m)
