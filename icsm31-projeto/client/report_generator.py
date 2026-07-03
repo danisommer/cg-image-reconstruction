@@ -56,6 +56,8 @@ class ReconstructionResult:
     request_id: str
     reduction_factor: float = 0.0
     lambda_reg: float = 0.0
+    cpu_reconstrucao_s: float = 0.0
+    memoria_pico_mb: float = 0.0
 
 
 # Largura util em A4 com margens de 2 cm de cada lado (~17 cm). Cada coluna
@@ -146,6 +148,8 @@ def _compare_table(
         ["Metrica", "Python (interpretado)", "Go (compilado)"],
         ["Iteracoes", _fmt_iter(py), _fmt_iter(go)],
         ["Tempo (s)", _fmt_time(py), _fmt_time(go)],
+        ["CPU (s)", _fmt_num(py, "cpu_reconstrucao_s"), _fmt_num(go, "cpu_reconstrucao_s")],
+        ["Memoria pico (MB)", _fmt_num(py, "memoria_pico_mb"), _fmt_num(go, "memoria_pico_mb")],
         ["c = ||H^T H||_2", _fmt_num(py, "reduction_factor"), _fmt_num(go, "reduction_factor")],
         ["lambda", _fmt_num(py, "lambda_reg"), _fmt_num(go, "lambda_reg")],
         ["Inicio", _fmt_ts(py, "started_at"), _fmt_ts(go, "started_at")],

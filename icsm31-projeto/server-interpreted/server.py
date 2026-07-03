@@ -37,8 +37,10 @@ import base64
 import json
 import logging
 import os
+import resource
 import struct
 import sys
+import time
 import zlib
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -60,6 +62,18 @@ MODEL_CONFIG = {
     1: {"S": 794, "N": 64, "size": (60, 60)},
     2: {"S": 436, "N": 64, "size": (30, 30)},
 }
+
+
+def _peak_rss_mb() -> float:
+    """Pico de memoria residente (RSS) do processo, em MB, so com a stdlib.
+
+    Usa resource.getrusage(RUSAGE_SELF).ru_maxrss. As unidades diferem por SO:
+    macOS/BSD reportam em bytes; Linux, em kilobytes.
+    """
+    maxrss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    if sys.platform == "darwin":
+        return maxrss / (1024.0 * 1024.0)  # bytes -> MB
+    return maxrss / 1024.0                  # kB -> MB (Linux)
 
 
 def _load_H(path: str) -> Matrix:
@@ -211,7 +225,9 @@ def handle_reconstruct(payload: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
 
     # started_at / finished_at cercam APENAS a reconstrucao (2 dos metadados
     # obrigatorios). Despacho para o algoritmo escolhido (enunciado, "Algoritmo 1").
+    # cpu0: tempo de CPU (user+sys) do processo, para medir a CPU consumida.
     started_at = datetime.now(timezone.utc)
+    cpu0 = time.process_time()
 
     if algorithm == "cgnr":
         f, n_iter, tempo = cgnr(H, g)
@@ -220,7 +236,9 @@ def handle_reconstruct(payload: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
     else:
         return 400, {"error": f"algoritmo invalido: {algorithm}"}
 
+    cpu_reconstrucao = time.process_time() - cpu0  # CPU gasta na reconstrucao (s)
     finished_at = datetime.now(timezone.utc)
+    mem_pico_mb = _peak_rss_mb()  # pico de RSS do processo ate aqui (MB)
 
     # Metadados obrigatorios do enunciado ("Requisitos nao funcionais"), gravados
     # no PNG (chunks tEXt) e tambem devolvidos no JSON:
@@ -245,13 +263,13 @@ def handle_reconstruct(payload: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
     image_b64 = base64.b64encode(png_bytes).decode("ascii")
 
     LOG.info(
-        "reconstruct ok algo=%s model=%d iter=%d tempo=%.4fs c=%.4g lambda=%.4g",
+        "reconstruct ok algo=%s model=%d iter=%d tempo=%.4fs cpu=%.4fs mem=%.1fMB",
         algorithm,
         model,
         n_iter,
         tempo,
-        c_reduction,
-        lambda_reg,
+        cpu_reconstrucao,
+        mem_pico_mb,
     )
 
     return 200, {
@@ -261,6 +279,8 @@ def handle_reconstruct(payload: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
         "height": height,
         "n_iter": n_iter,
         "tempo_reconstrucao_s": tempo,
+        "cpu_reconstrucao_s": cpu_reconstrucao,
+        "memoria_pico_mb": mem_pico_mb,
         "reduction_factor": c_reduction,
         "lambda_reg": lambda_reg,
         "started_at": started_at.isoformat(),

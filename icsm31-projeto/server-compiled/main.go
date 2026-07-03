@@ -38,7 +38,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"runtime"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -49,6 +51,36 @@ type modelConfig struct {
 var modelConfigs = map[int]modelConfig{
 	1: {S: 794, N: 64, W: 60, H: 60},
 	2: {S: 436, N: 64, W: 30, H: 30},
+}
+
+// timevalSeconds converte um syscall.Timeval em segundos.
+func timevalSeconds(tv syscall.Timeval) float64 {
+	return float64(tv.Sec) + float64(tv.Usec)/1e6
+}
+
+// cpuTimeSeconds devolve o tempo de CPU acumulado do processo (user+sys), so
+// com a stdlib (syscall.Getrusage). Medindo antes/depois da reconstrucao,
+// a diferenca da a CPU consumida por ela.
+func cpuTimeSeconds() float64 {
+	var ru syscall.Rusage
+	if err := syscall.Getrusage(syscall.RUSAGE_SELF, &ru); err != nil {
+		return 0
+	}
+	return timevalSeconds(ru.Utime) + timevalSeconds(ru.Stime)
+}
+
+// peakRSSMB devolve o pico de memoria residente (RSS) do processo, em MB.
+// As unidades de ru_maxrss diferem por SO: macOS/BSD em bytes, Linux em kB.
+func peakRSSMB() float64 {
+	var ru syscall.Rusage
+	if err := syscall.Getrusage(syscall.RUSAGE_SELF, &ru); err != nil {
+		return 0
+	}
+	maxrss := float64(ru.Maxrss)
+	if runtime.GOOS == "darwin" {
+		return maxrss / (1024.0 * 1024.0) // bytes -> MB
+	}
+	return maxrss / 1024.0 // kB -> MB (Linux)
 }
 
 type reconstructRequest struct {
@@ -66,6 +98,8 @@ type reconstructResponse struct {
 	Height             int     `json:"height"`
 	NIter              int     `json:"n_iter"`
 	TempoReconstrucaoS float64 `json:"tempo_reconstrucao_s"`
+	CPUReconstrucaoS   float64 `json:"cpu_reconstrucao_s"`
+	MemoriaPicoMB      float64 `json:"memoria_pico_mb"`
 	ReductionFactor    float64 `json:"reduction_factor"`
 	LambdaReg          float64 `json:"lambda_reg"`
 	StartedAt          string  `json:"started_at"`
@@ -239,6 +273,7 @@ func reconstructHandler(w http.ResponseWriter, r *http.Request) {
 	// ambos param em |epsilon| < 1e-4 ou 10 iteracoes.
 	algo := strings.ToLower(strings.TrimSpace(req.Algorithm))
 	started := time.Now().UTC()
+	cpu0 := cpuTimeSeconds() // CPU do processo antes da reconstrucao
 
 	var (
 		f     []float64
@@ -255,7 +290,9 @@ func reconstructHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	cpuRecon := cpuTimeSeconds() - cpu0 // CPU gasta na reconstrucao (s)
 	finished := time.Now().UTC()
+	memPicoMB := peakRSSMB() // pico de RSS do processo ate aqui (MB)
 
 	// Metadados obrigatorios do enunciado ("Requisitos nao funcionais"), gravados
 	// no PNG (chunks tEXt) e tambem devolvidos no JSON:
@@ -289,6 +326,8 @@ func reconstructHandler(w http.ResponseWriter, r *http.Request) {
 		Height:             cfg.H,
 		NIter:              nIter,
 		TempoReconstrucaoS: dur.Seconds(),
+		CPUReconstrucaoS:   cpuRecon,
+		MemoriaPicoMB:      memPicoMB,
 		ReductionFactor:    cReduction,
 		LambdaReg:          lambdaReg,
 		StartedAt:          started.Format(time.RFC3339Nano),
@@ -301,8 +340,8 @@ func reconstructHandler(w http.ResponseWriter, r *http.Request) {
 		log.Printf("falha encode: %v", err)
 	}
 
-	log.Printf("reconstruct ok algo=%s model=%d iter=%d tempo=%.4fs c=%.4g lambda=%.4g",
-		algo, req.Model, nIter, dur.Seconds(), cReduction, lambdaReg)
+	log.Printf("reconstruct ok algo=%s model=%d iter=%d tempo=%.4fs cpu=%.4fs mem=%.1fMB",
+		algo, req.Model, nIter, dur.Seconds(), cpuRecon, memPicoMB)
 }
 
 func healthHandler(w http.ResponseWriter, _ *http.Request) {

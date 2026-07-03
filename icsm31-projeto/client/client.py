@@ -221,12 +221,14 @@ def _send_one(
 
     data = resp.json()
     LOG.info(
-        "[%s][%s] algo=%s iter=%d tempo=%.4fs rtt=%.4fs",
+        "[%s][%s] algo=%s iter=%d tempo=%.4fs cpu=%.4fs mem=%.1fMB rtt=%.4fs",
         request_id,
         server_name,
         data.get("algorithm"),
         data.get("n_iter"),
         data.get("tempo_reconstrucao_s"),
+        data.get("cpu_reconstrucao_s", 0.0),
+        data.get("memoria_pico_mb", 0.0),
         rtt,
     )
 
@@ -250,6 +252,8 @@ def _send_one(
         request_id=request_id,
         reduction_factor=float(data.get("reduction_factor", 0.0)),
         lambda_reg=float(data.get("lambda_reg", 0.0)),
+        cpu_reconstrucao_s=float(data.get("cpu_reconstrucao_s", 0.0)),
+        memoria_pico_mb=float(data.get("memoria_pico_mb", 0.0)),
     )
 
 
@@ -473,25 +477,21 @@ def run_rounds(
         LOG.warning("Nenhum resultado coletado; relatorio nao sera gerado.")
         return
 
-    # Nome do PDF prioriza a configuracao da execucao; o timestamp vai como
-    # sufixo apenas para nao sobrescrever execucoes com a mesma configuracao.
+    # Nome do PDF: tamanho da execucao (30x30, 60x60 ou "misto") + timestamp.
+    # O timestamp evita sobrescrever execucoes anteriores.
     if model is not None:
         w, h = MODEL_CONFIG[model]["size"]
         size_slug = f"{w}x{h}"
     else:
         size_slug = "misto"
-    config_slug = (
-        f"{size_slug}_{len(plan)}rodada{'s' if len(plan) != 1 else ''}"
-        "_1servidor-por-vez"
-    )
 
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    out_path = os.path.join(report_dir, f"relatorio_{config_slug}_{ts}.pdf")
+    out_path = os.path.join(report_dir, f"relatorio_{size_slug}_{ts}.pdf")
     generate_report(all_results, out_path)
     LOG.info("Relatorio gerado em %s (%d reconstrucoes)", out_path, len(all_results))
 
     comp_path = os.path.join(
-        report_dir, f"relatorio_comparativo_{config_slug}_{ts}.pdf"
+        report_dir, f"relatorio_comparativo_{size_slug}_{ts}.pdf"
     )
     generate_comparative_report(all_results, comp_path)
     LOG.info("Relatorio comparativo gerado em %s", comp_path)

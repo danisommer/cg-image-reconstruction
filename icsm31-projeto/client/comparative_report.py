@@ -106,7 +106,7 @@ def _throughput_rows(results: List[ReconstructionResult]) -> List[List[str]]:
         [
             "Servidor",
             "Recons.",
-            "Tempo total CPU (s)",
+            "Tempo total (s)",
             "Tempo medio (ms)",
             "Throughput (rec/s)",
         ]
@@ -124,6 +124,43 @@ def _throughput_rows(results: List[ReconstructionResult]) -> List[List[str]]:
                 _fmt(total_s, 4),
                 _fmt(media_ms),
                 _fmt(throughput),
+            ]
+        )
+    return rows
+
+
+def _resource_rows(results: List[ReconstructionResult]) -> List[List[str]]:
+    """Memoria e CPU por servidor.
+
+    CPU = tempo de CPU (user+sys) medido pelo servidor durante a reconstrucao.
+    Memoria pico = maior RSS observado no servidor (getrusage ru_maxrss).
+    """
+    by_server: Dict[str, List[ReconstructionResult]] = defaultdict(list)
+    for r in results:
+        by_server[r.server.lower()].append(r)
+
+    rows = [
+        [
+            "Servidor",
+            "Recons.",
+            "CPU media (ms)",
+            "CPU total (s)",
+            "Memoria pico (MB)",
+        ]
+    ]
+    for server in sorted(by_server.keys()):
+        recs = by_server[server]
+        cpu_total = sum(r.cpu_reconstrucao_s for r in recs)
+        cpu_media_ms = (cpu_total / len(recs)) * 1000.0 if recs else 0.0
+        mem_pico = max((r.memoria_pico_mb for r in recs), default=0.0)
+        label = _SERVER_LABEL.get(server, server)
+        rows.append(
+            [
+                label,
+                str(len(recs)),
+                _fmt(cpu_media_ms),
+                _fmt(cpu_total, 4),
+                _fmt(mem_pico, 1),
             ]
         )
     return rows
@@ -246,7 +283,22 @@ def generate_comparative_report(
     )
     story.append(Spacer(1, 0.6 * cm))
 
-    story.append(Paragraph("4. Sintese", styles["Heading2"]))
+    story.append(Paragraph("4. Memoria e CPU por servidor", styles["Heading2"]))
+    story.append(Spacer(1, 0.2 * cm))
+    story.append(_styled_table(_resource_rows(results)))
+    story.append(Spacer(1, 0.2 * cm))
+    story.append(
+        Paragraph(
+            "CPU = tempo de CPU (user+sys) gasto na reconstrucao, medido pelo "
+            "servidor (getrusage). Memoria pico = maior RSS do processo servidor "
+            "(getrusage ru_maxrss); reflete o custo de carregar a matriz H "
+            "(a versao Python ainda cacheia a transposta H^T).",
+            styles["Italic"],
+        )
+    )
+    story.append(Spacer(1, 0.6 * cm))
+
+    story.append(Paragraph("5. Sintese", styles["Heading2"]))
     story.append(Spacer(1, 0.2 * cm))
     story.append(Paragraph(_speedup_text(results), styles["Normal"]))
     story.append(Spacer(1, 0.2 * cm))
