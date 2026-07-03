@@ -1,12 +1,13 @@
 """
-Relatorio comparativo preenchido a partir das reconstrucoes coletadas.
+Relatorio comparativo entre as duas versoes de servidor.
+Requisito do enunciado (servidor): "criar um relatorio comparativo analisando
+os resultados obtidos com as duas versoes".
 
-Agrega os resultados das duas versoes de servidor (interpretado Python x
-compilado Go) e produz um PDF com tabelas de tempo medio, desvio padrao,
-iteracoes medias e throughput, alem de informacoes do ambiente de execucao.
-
-Diferente de `relatorio_comparativo_template.md` (em branco), este arquivo e
-gerado automaticamente com os numeros reais de cada rodada.
+Agrega os resultados do servidor interpretado (Python) e do compilado (Go) e
+produz um PDF com tabelas de tempo medio, desvio padrao, iteracoes medias,
+throughput e o ambiente de execucao. O throughput (rec/s) mede diretamente o
+objetivo do trabalho: reconstruir o maior numero de imagens no menor tempo.
+Os numeros vem das rodadas reais coletadas em tempo de execucao.
 """
 
 from __future__ import annotations
@@ -263,9 +264,8 @@ def generate_comparative_report(
     story.append(Spacer(1, 0.5 * cm))
     story.append(
         Paragraph(
-            "<i>Relatorio gerado por client/comparative_report.py. Para a versao "
-            "com analise qualitativa das imagens e graficos, ver "
-            "reports/relatorio_comparativo_template.md.</i>",
+            "<i>Relatorio gerado automaticamente por "
+            "client/comparative_report.py a partir das rodadas coletadas.</i>",
             styles["Italic"],
         )
     )

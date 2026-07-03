@@ -196,17 +196,21 @@ def handle_reconstruct(payload: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
     except FileNotFoundError as exc:
         return 500, {"error": str(exc)}
 
+    # Ganho de sinal do enunciado (signal_gain.py). Aplicado so quando o sinal
+    # chega bruto; sinais que ja vem com ganho passam apply_gain=False.
     if apply_gain:
         try:
             g = apply_signal_gain(g, S=S, N=N)
         except Exception as exc:  # noqa: BLE001
             LOG.warning("Falha no ganho de sinal: %s", exc)
 
-    # Parametros do enunciado (recalculados do zero a cada requisicao):
+    # Parametros do enunciado (params.py), recalculados do zero a cada requisicao:
     #   c = ||H^T H||_2  e  lambda = max(abs(H^T g)) * 0.10
     c_reduction = reduction_factor(H)
     lambda_reg = regularization_lambda(H, g)
 
+    # started_at / finished_at cercam APENAS a reconstrucao (2 dos metadados
+    # obrigatorios). Despacho para o algoritmo escolhido (enunciado, "Algoritmo 1").
     started_at = datetime.now(timezone.utc)
 
     if algorithm == "cgnr":
@@ -218,6 +222,14 @@ def handle_reconstruct(payload: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
 
     finished_at = datetime.now(timezone.utc)
 
+    # Metadados obrigatorios do enunciado ("Requisitos nao funcionais"), gravados
+    # no PNG (chunks tEXt) e tambem devolvidos no JSON:
+    #   algorithm  -> identificacao do algoritmo
+    #   started_at -> data/hora de inicio da reconstrucao
+    #   finished_at-> data/hora de termino da reconstrucao
+    #   size       -> tamanho em pixels
+    #   iterations -> numero de iteracoes executadas
+    # (reduction_factor e lambda_reg sao extras uteis para o relatorio.)
     metadata = {
         "algorithm": algorithm.upper(),
         "started_at": started_at.isoformat(),

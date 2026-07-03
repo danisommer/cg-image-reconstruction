@@ -260,9 +260,11 @@ def _build_jobs(
 ) -> List[Tuple[str, SignalFile]]:
     """Monta a lista de jobs (algoritmo, sinal) sorteando a cada rodada.
 
-    Cada job sorteia o algoritmo (cgnr/cgne) e o sinal (o que define modelo e
-    ganho aleatoriamente). A lista e montada uma unica vez e depois reproduzida
-    identicamente em cada servidor — garantindo comparacao justa.
+    Requisito do enunciado (cliente): "o ganho de sinal e o modelo da imagem
+    deverao ser definidos aleatoriamente". Cada job sorteia o algoritmo
+    (cgnr/cgne) e o sinal — e o sinal ja fixa o modelo (1 ou 2) e o ganho
+    (aplicar ou nao). A lista e montada uma unica vez e depois reproduzida
+    identicamente em cada servidor, garantindo comparacao justa.
     """
     jobs = [
         (rng.choice(["cgnr", "cgne"]), rng.choice(signal_pool)) for _ in range(rounds)
@@ -278,15 +280,18 @@ def _build_plan(
 ) -> List[RoundSpec]:
     """Converte os jobs num plano fixo (carrega g, resolve H e sorteia o atraso).
 
-    O atraso de cada rodada e sorteado AQUI, uma unica vez, e guardado no plano —
-    assim os dois servidores recebem exatamente os mesmos sinais, na mesma ordem
-    e com os mesmos atrasos entre rodadas.
+    Atende dois requisitos do enunciado (cliente) de uma so vez:
+      - "enviar sinais g em intervalos de tempo aleatorios": o atraso de cada
+        rodada e sorteado AQUI (rng.uniform), uma unica vez;
+      - "a sequencia de sinais g deve ser a mesma para as duas versoes": como o
+        plano (sinais, ordem e atrasos) e fixado aqui e reexecutado igual contra
+        cada servidor, os dois recebem exatamente o mesmo g em cada rodada.
     """
     plan: List[RoundSpec] = []
     for round_idx, (algorithm, signal) in enumerate(jobs, start=1):
         request_id = uuid.uuid4().hex[:8]
         model = signal.model
-        delay_after = rng.uniform(0.5, 3.0)
+        delay_after = rng.uniform(0.5, 3.0)  # intervalo aleatorio entre envios
 
         try:
             g = _load_signal(signal.path)

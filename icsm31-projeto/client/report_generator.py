@@ -1,5 +1,7 @@
 """
 Gerador de relatorio PDF com as imagens reconstruidas.
+Requisito do enunciado (cliente): "gerar um relatorio com todas as imagens
+reconstruidas com: imagem gerada, numero de iteracoes e tempo de reconstrucao".
 
 As reconstrucoes sao PAREADAS por rodada (request_id) e exibidas LADO A LADO:
 a coluna da esquerda mostra a versao interpretada (Python) e a da direita a

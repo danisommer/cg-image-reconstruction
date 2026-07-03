@@ -1,19 +1,19 @@
-// Package main — Parametros do enunciado (Algoritmos e definicoes), em Go puro.
+// Package main — Parametros do enunciado (secao "Algoritmos e definicoes").
 //
-//	c      = ||H^T H||_2              // fator de reducao
-//	lambda = max(abs(H^T g)) * 0.10  // coeficiente de regularizacao
+//	"Calculo do fator de reducao (c)":            c      = ||H^T H||_2
+//	"Calculo do coeficiente de regularizacao (l)": lambda = max(abs(H^T g)) * 0.10
 //
 // Como ||H^T H||_2 = sigma_max(H)^2 (maior autovalor de H^T H), c e obtido
 // por iteracao de potencia sobre H^T H, sem montar H^T H nem rodar SVD na
-// matriz cheia. Toda a algebra e feita no proprio codigo (ver linalg.go), sem
-// gonum.
+// matriz cheia. Toda a algebra e implementada no proprio projeto (ver
+// linalg.go), sem gonum.
 //
 // Sem cache: c e recalculado do zero a cada requisicao (nenhum estado e
 // reaproveitado entre reconstrucoes).
 package main
 
 // ReductionFactor calcula c = ||H^T H||_2 (maior autovalor de H^T H) por
-// iteracao de potencia.
+// iteracao de potencia. Enunciado: "Calculo do fator de reducao (c)".
 func ReductionFactor(H *Matrix) float64 {
 	// Para as matrizes H deste projeto o autovalor dominante e pouco separado,
 	// entao |dnw|/nw estabiliza em ~1e-4 (por volta da iteracao ~30) e nao desce
@@ -59,6 +59,7 @@ func ReductionFactor(H *Matrix) float64 {
 }
 
 // RegularizationLambda calcula lambda = max(abs(H^T g)) * 0.10.
+// Enunciado: "Calculo do coeficiente de regularizacao (l)".
 func RegularizationLambda(H *Matrix, g []float64) float64 {
 	htg := H.TMatVec(g)
 

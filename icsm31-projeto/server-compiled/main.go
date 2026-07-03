@@ -219,6 +219,8 @@ func reconstructHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Ganho de sinal do enunciado (signal_gain.go). Aplicado so quando o sinal
+	// chega bruto; sinais que ja vem com ganho passam apply_gain=false.
 	applyGain := true
 	if req.ApplyGain != nil {
 		applyGain = *req.ApplyGain
@@ -227,11 +229,14 @@ func reconstructHandler(w http.ResponseWriter, r *http.Request) {
 		ApplySignalGain(g, cfg.S, cfg.N)
 	}
 
-	// Parametros do enunciado (recalculados do zero a cada requisicao):
+	// Parametros do enunciado (params.go), recalculados do zero a cada requisicao:
 	//   c = ||H^T H||_2  e  lambda = max(abs(H^T g)) * 0.10
 	cReduction := ReductionFactor(H)
 	lambdaReg := RegularizationLambda(H, g)
 
+	// started / finished cercam APENAS a reconstrucao (2 dos metadados
+	// obrigatorios). Despacho para o algoritmo escolhido (enunciado, "Algoritmo 1");
+	// ambos param em |epsilon| < 1e-4 ou 10 iteracoes.
 	algo := strings.ToLower(strings.TrimSpace(req.Algorithm))
 	started := time.Now().UTC()
 
@@ -252,6 +257,14 @@ func reconstructHandler(w http.ResponseWriter, r *http.Request) {
 
 	finished := time.Now().UTC()
 
+	// Metadados obrigatorios do enunciado ("Requisitos nao funcionais"), gravados
+	// no PNG (chunks tEXt) e tambem devolvidos no JSON:
+	//   algorithm  -> identificacao do algoritmo
+	//   started_at -> data/hora de inicio da reconstrucao
+	//   finished_at-> data/hora de termino da reconstrucao
+	//   size       -> tamanho em pixels
+	//   iterations -> numero de iteracoes executadas
+	// (reduction_factor e lambda_reg sao extras uteis para o relatorio.)
 	metadata := []textPair{
 		{"algorithm", strings.ToUpper(algo)},
 		{"started_at", started.Format(time.RFC3339Nano)},

@@ -1,89 +1,90 @@
-// Package main — CGNR (Conjugate Gradient Normal Residual) em Go puro.
+// Package main — CGNR (Conjugate Gradient Normal Residual).
+// Enunciado: "Algoritmo 1: CGNR" (Saad 2003, p. 266).
 //
-// Toda a algebra linear e feita no proprio codigo (ver linalg.go), sem gonum.
+// Metodo iterativo que resolve H f = g no sentido de minimos quadrados. Toda a
+// algebra linear e implementada no proprio projeto (ver linalg.go), sem gonum.
+// Siglas: g = vetor de sinal, H = matriz de modelo, f = imagem.
 //
-// Algoritmo:
+// Passos (cada linha do laco esta rotulada com o passo correspondente):
 //
 //	f0 = 0
-//	r0 = g - H * f0
-//	z0 = H^T * r0
+//	r0 = g - H f0
+//	z0 = H^T r0
 //	p0 = z0
-//	loop:
-//	    w_i   = H * p_i
-//	    alpha = ||z_i||^2 / ||w_i||^2
-//	    f     = f + alpha * p_i
-//	    r     = r - alpha * w_i
-//	    z_i+1 = H^T * r
-//	    beta  = ||z_i+1||^2 / ||z_i||^2
-//	    p_i+1 = z_i+1 + beta * p_i
+//	para i = 0, 1, ... ate convergir:
+//	    w_i     = H p_i
+//	    alpha_i = ||z_i||^2 / ||w_i||^2
+//	    f_i+1   = f_i + alpha_i p_i
+//	    r_i+1   = r_i - alpha_i w_i
+//	    z_i+1   = H^T r_i+1
+//	    beta_i  = ||z_i+1||^2 / ||z_i||^2
+//	    p_i+1   = z_i+1 + beta_i p_i
 package main
 
 import "time"
 
-// CGNR resolve H * f = g por gradiente conjugado no residual normal.
+// CGNR resolve H f = g por gradiente conjugado no residual normal.
 //
 // Parametros:
 //   - H: matriz de modelo (S x M)
 //   - g: vetor de sinal (tamanho S)
-//   - maxIter: numero maximo de iteracoes
-//   - tol: tolerancia para |epsilon|
+//   - maxIter: numero maximo de iteracoes (10, conforme enunciado)
+//   - tol: tolerancia do criterio de parada |epsilon| (1e-4)
 //
 // Retorna:
 //   - f: vetor reconstruido (tamanho M)
 //   - nIter: numero de iteracoes executadas
 //   - tempo: duracao da reconstrucao
+//
+// Criterio de parada (enunciado): |epsilon| < 1e-4 OU maxIter iteracoes, com
+// epsilon = ||r_i+1||_2 - ||r_i||_2 ("Calculo do erro").
 func CGNR(H *Matrix, g []float64, maxIter int, tol float64) ([]float64, int, time.Duration) {
 	t0 := time.Now()
 
 	m := H.Cols
 
-	f := make([]float64, m)
+	f := make([]float64, m)           // f0 = 0
+	r := append([]float64(nil), g...) // r0 = g - H f0 = g  (f0 = 0)
+	z := H.TMatVec(r)                 // z0 = H^T r0
+	p := append([]float64(nil), z...) // p0 = z0
 
-	// r0 = g - H*f0 = g (pois f0 = 0)
-	r := append([]float64(nil), g...)
-	z := H.TMatVec(r)
-	p := append([]float64(nil), z...)
-
-	zNormSq := Dot(z, z)
-	// epsilon = ||r_i+1||_2 - ||r_i||_2 (diferenca de normas, conforme enunciado)
-	prevRNorm := Sqrt(Dot(r, r))
+	zNormSq := Dot(z, z)         // ||z0||^2
+	prevRNorm := Sqrt(Dot(r, r)) // ||r0||_2, base do erro epsilon
 
 	nIter := 0
 	for i := 0; i < maxIter; i++ {
 		nIter = i + 1
 
-		w := H.MatVec(p)
+		w := H.MatVec(p) // w_i = H p_i
 		wNormSq := Dot(w, w)
 		if wNormSq == 0 {
 			break
 		}
 
-		alpha := zNormSq / wNormSq
+		alpha := zNormSq / wNormSq // alpha_i = ||z_i||^2 / ||w_i||^2
 
 		for k := range f {
-			f[k] += alpha * p[k]
+			f[k] += alpha * p[k] // f_i+1 = f_i + alpha_i p_i
 		}
 		for k := range r {
-			r[k] -= alpha * w[k]
+			r[k] -= alpha * w[k] // r_i+1 = r_i - alpha_i w_i
 		}
 
-		newRNorm := Sqrt(Dot(r, r))
-		if Abs(newRNorm-prevRNorm) < tol {
+		newRNorm := Sqrt(Dot(r, r))        // ||r_i+1||_2
+		if Abs(newRNorm-prevRNorm) < tol { // parada: |epsilon| < 1e-4
 			break
 		}
 		prevRNorm = newRNorm
 
-		zNext := H.TMatVec(r)
+		zNext := H.TMatVec(r) // z_i+1 = H^T r_i+1
 		zNextNormSq := Dot(zNext, zNext)
-
 		if zNormSq == 0 {
 			break
 		}
-		beta := zNextNormSq / zNormSq
+		beta := zNextNormSq / zNormSq // beta_i = ||z_i+1||^2 / ||z_i||^2
 
-		// p = zNext + beta * p
 		for k := range p {
-			p[k] = zNext[k] + beta*p[k]
+			p[k] = zNext[k] + beta*p[k] // p_i+1 = z_i+1 + beta_i p_i
 		}
 		zNormSq = zNextNormSq
 	}

@@ -1,13 +1,13 @@
 """
-Parametros definidos no enunciado (Algoritmos e definicoes) — Python puro.
+Parametros definidos no enunciado (secao "Algoritmos e definicoes").
 
-    c = ||H^T * H||_2              # Fator de reducao
-    lambda = max(abs(H^T * g)) * 0.10  # Coeficiente de regularizacao
+    "Calculo do fator de reducao (c)":            c = ||H^T H||_2
+    "Calculo do coeficiente de regularizacao (l)": lambda = max(abs(H^T g)) * 0.10
 
 Como ||H^T H||_2 = sigma_max(H)^2 (maior autovalor de H^T H), o fator de
 reducao e obtido por iteracao de potencia sobre H^T H, evitando montar a
 matriz cheia ou rodar uma SVD completa em H (50816 x 3600). Toda a algebra
-e feita no proprio codigo (modulo `linalg`), sem numpy/scipy.
+e implementada no proprio projeto (modulo `linalg`), sem numpy/scipy.
 
 Sem cache: c e recalculado do zero a cada requisicao (nenhum estado e
 reaproveitado entre reconstrucoes).
@@ -25,10 +25,11 @@ def reduction_factor(
     max_iter: int = 100,
     tol: float = 1e-4,
 ) -> float:
-    """Calcula c = ||H^T H||_2 (maior autovalor de H^T H) por iteracao de potencia.
+    """Enunciado, "Calculo do fator de reducao (c)": c = ||H^T H||_2.
 
-    Usa um vetor inicial deterministico (todos 1) — identico ao do servidor Go —
-    para que ambas as versoes produzam o mesmo c para a mesma matriz H.
+    Obtido como o maior autovalor de H^T H por iteracao de potencia. Usa um
+    vetor inicial deterministico (todos 1) — identico ao do servidor Go — para
+    que ambas as versoes produzam o mesmo c para a mesma matriz H.
 
     Args:
         H: matriz de modelo (linalg.Matrix), shape (S, M).
@@ -67,7 +68,9 @@ def reduction_factor(
 
 
 def regularization_lambda(H: Matrix, g: Sequence[float]) -> float:
-    """Calcula lambda = max(abs(H^T * g)) * 0.10."""
+    """Enunciado, "Calculo do coeficiente de regularizacao (l)":
+    lambda = max(abs(H^T g)) * 0.10.
+    """
     htg = H.rmatvec(g)
     max_abs = 0.0
     for value in htg:

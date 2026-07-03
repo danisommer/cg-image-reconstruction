@@ -37,13 +37,13 @@ JSON da resposta. Ambos os servidores produzem o mesmo conjunto de campos.
 
 | Dado exigido | Versão interpretada (Python) | Versão compilada (Go) |
 |--------------|------------------------------|-----------------------|
-| Identificação do algoritmo | [`server.py:222`](server-interpreted/server.py#L222) (`"algorithm"`) | [`main.go:256`](server-compiled/main.go#L256) (`"algorithm"`) |
-| Data/hora de **início** da reconstrução | [`server.py:210,223`](server-interpreted/server.py#L210) (`started_at`) | [`main.go:236,257`](server-compiled/main.go#L236) (`started_at`) |
-| Data/hora de **término** da reconstrução | [`server.py:219,224`](server-interpreted/server.py#L219) (`finished_at`) | [`main.go:253,258`](server-compiled/main.go#L253) (`finished_at`) |
-| Tamanho em pixels | [`server.py:225`](server-interpreted/server.py#L225) (`"size"`) | [`main.go:259`](server-compiled/main.go#L259) (`"size"`) |
-| Número de iterações executadas | [`server.py:226`](server-interpreted/server.py#L226) (`"iterations"`) | [`main.go:260`](server-compiled/main.go#L260) (`"iterations"`) |
+| Identificação do algoritmo | [`server.py:234`](server-interpreted/server.py#L234) (`"algorithm"`) | [`main.go:269`](server-compiled/main.go#L269) (`"algorithm"`) |
+| Data/hora de **início** da reconstrução | [`server.py:214,235`](server-interpreted/server.py#L214) (`started_at`) | [`main.go:241,270`](server-compiled/main.go#L241) (`started_at`) |
+| Data/hora de **término** da reconstrução | [`server.py:223,236`](server-interpreted/server.py#L223) (`finished_at`) | [`main.go:258,271`](server-compiled/main.go#L258) (`finished_at`) |
+| Tamanho em pixels | [`server.py:237`](server-interpreted/server.py#L237) (`"size"`) | [`main.go:272`](server-compiled/main.go#L272) (`"size"`) |
+| Número de iterações executadas | [`server.py:238`](server-interpreted/server.py#L238) (`"iterations"`) | [`main.go:273`](server-compiled/main.go#L273) (`"iterations"`) |
 
-- Montagem do bloco de metadados: [`server.py:221-230`](server-interpreted/server.py#L221-L230) / [`main.go:255-264`](server-compiled/main.go#L255-L264)
+- Montagem do bloco de metadados: [`server.py:233-242`](server-interpreted/server.py#L233-L242) / [`main.go:268-277`](server-compiled/main.go#L268-L277)
 - Gravação dos metadados no PNG (encoder próprio, sem Pillow): [`_encode_png_gray` — server.py:100-121](server-interpreted/server.py#L100-L121) / [`addPNGText` — main.go:88-126](server-compiled/main.go#L88-L126)
 
 ### Cliente
@@ -52,13 +52,13 @@ Aplicação única em [client/client.py](client/client.py).
 
 | Requisito | Onde está |
 |-----------|-----------|
-| Enviar sequência de sinais `g` em **intervalos de tempo aleatórios** | Atraso sorteado uma vez por rodada em [`client.py:289`](client/client.py#L289) (`rng.uniform(0.5, 3.0)`) e aplicado em [`client.py:387-393`](client/client.py#L387-L393) (`time.sleep`) |
-| **Ganho de sinal e modelo definidos aleatoriamente** | O sinal é sorteado do pool em [`_build_jobs` — client.py:256-271](client/client.py#L256-L271); cada sinal já carrega o **modelo** (1 ou 2) e o flag de **ganho** (`apply_gain`), definidos em [`_discover_all_signals` — client.py:157-167](client/client.py#L157-L167) e [`SignalFile` — client.py:41-47](client/client.py#L41-L47). Algoritmo (cgnr/cgne) também sorteado em [`client.py:267-268`](client/client.py#L267-L268) |
-| Gerar **relatório com todas as imagens** (imagem + iterações + tempo) | [client/report_generator.py](client/report_generator.py) — imagem em [`_image_flowable:80-88`](client/report_generator.py#L80-L88), iterações e tempo na tabela comparativa [`_compare_table:141-142`](client/report_generator.py#L141-L142). Chamado em [`client.py:462-465`](client/client.py#L462-L465). **Python e Go são exibidos lado a lado por imagem** (pareados por `request_id` em [`_pair_by_round:65`](client/report_generator.py#L65), montados em [`_images_table:91`](client/report_generator.py#L91)) |
-| **Mesma sequência `g` para as duas versões** | O plano de rodadas é montado **uma única vez** ([`RoundSpec` — client.py:50-66](client/client.py#L50-L66), [`_build_plan` — client.py:274-319](client/client.py#L274-L319)) e reexecutado idêntico contra cada servidor no laço [`client.py:427-449`](client/client.py#L427-L449). Mesmos sinais, mesma ordem e os mesmos atrasos para os dois |
+| Enviar sequência de sinais `g` em **intervalos de tempo aleatórios** | Atraso sorteado uma vez por rodada em [`client.py:294`](client/client.py#L294) (`rng.uniform(0.5, 3.0)`) e aplicado em [`client.py:391-398`](client/client.py#L391-L398) (`time.sleep`) |
+| **Ganho de sinal e modelo definidos aleatoriamente** | O sinal é sorteado do pool em [`_build_jobs` — client.py:256-273](client/client.py#L256-L273); cada sinal já carrega o **modelo** (1 ou 2) e o flag de **ganho** (`apply_gain`), definidos em [`_discover_all_signals` — client.py:157-167](client/client.py#L157-L167) e [`SignalFile` — client.py:42-47](client/client.py#L42-L47). Algoritmo (cgnr/cgne) também sorteado em [`client.py:270`](client/client.py#L270) |
+| Gerar **relatório com todas as imagens** (imagem + iterações + tempo) | [client/report_generator.py](client/report_generator.py) — imagem em [`_image_flowable:82-88`](client/report_generator.py#L82-L88), iterações e tempo na tabela comparativa [`_compare_table:147-148`](client/report_generator.py#L147-L148). Chamado em [`client.py:490`](client/client.py#L490). **Python e Go são exibidos lado a lado por imagem** (pareados por `request_id` em [`_pair_by_round:67`](client/report_generator.py#L67), montados em [`_images_table:93`](client/report_generator.py#L93)) |
+| **Mesma sequência `g` para as duas versões** | O plano de rodadas é montado **uma única vez** ([`RoundSpec` — client.py:51-66](client/client.py#L51-L66), [`_build_plan` — client.py:276-324](client/client.py#L276-L324)) e reexecutado idêntico contra cada servidor no laço [`client.py:448-470`](client/client.py#L448-L470). Mesmos sinais, mesma ordem e os mesmos atrasos para os dois |
 
 > Restrição de execução: os servidores **nunca rodam em paralelo**. O cliente
-> pausa entre as fases e pede a troca — ver [`_prompt_server_swap` — client.py:322-347](client/client.py#L322-L347).
+> pausa entre as fases e pede a troca — ver [`_prompt_server_swap` — client.py:327-353](client/client.py#L327-L353).
 
 ### Servidor
 
@@ -66,17 +66,17 @@ Aplicação única em [client/client.py](client/client.py).
 |-----------|-----------|
 | Versão em **linguagem interpretada e não fortemente tipada** | [server-interpreted/](server-interpreted/) — Python, só stdlib ([`server.py`](server-interpreted/server.py)) |
 | Versão em **linguagem compilada e fortemente tipada** | [server-compiled/](server-compiled/) — Go, só stdlib ([`main.go`](server-compiled/main.go)) |
-| **Executar o algoritmo de reconstrução** | CGNR: [`cgnr.py`](server-interpreted/cgnr.py) / [`cgnr.go`](server-compiled/cgnr.go) · CGNE: [`cgne.py`](server-interpreted/cgne.py) / [`cgne.go`](server-compiled/cgne.go). Despacho em [`server.py:212-217`](server-interpreted/server.py#L212-L217) / [`main.go:243-251`](server-compiled/main.go#L243-L251) |
-| **Parar quando ε < 1e-4 ou nº de iterações = 10** | Python: `max_iter=10`, `tol=1e-4` ([`cgnr.py:37-38`](server-interpreted/cgnr.py#L37-L38), critério em [`cgnr.py:82`](server-interpreted/cgnr.py#L82); idem [`cgne.py:74-77`](server-interpreted/cgne.py#L74-L77)). Go: `CGNR(H, g, 10, 1e-4)` em [`main.go:245-247`](server-compiled/main.go#L245-L247), critério em [`cgnr.go:71`](server-compiled/cgnr.go#L71) |
-| **Relatório comparativo** entre as duas versões | [client/comparative_report.py](client/comparative_report.py) — tempos por algoritmo/modelo/servidor ([`_timings_rows:63`](client/comparative_report.py#L63)), speedup ([`_speedup_text:131`](client/comparative_report.py#L131)). Chamado em [`client.py:467-471`](client/client.py#L467-L471) |
-| Objetivo: **mais reconstruções no menor tempo** | Métrica de **throughput** (rec/s) em [`_throughput_rows` — comparative_report.py:99-128](client/comparative_report.py#L99-L128) |
+| **Executar o algoritmo de reconstrução** | CGNR: [`cgnr.py`](server-interpreted/cgnr.py) / [`cgnr.go`](server-compiled/cgnr.go) · CGNE: [`cgne.py`](server-interpreted/cgne.py) / [`cgne.go`](server-compiled/cgne.go). Despacho em [`server.py:216-221`](server-interpreted/server.py#L216-L221) / [`main.go:248-256`](server-compiled/main.go#L248-L256) |
+| **Parar quando ε < 1e-4 ou nº de iterações = 10** | Python: `max_iter=10`, `tol=1e-4` ([`cgnr.py:41-42`](server-interpreted/cgnr.py#L41-L42), critério em [`cgnr.py:85`](server-interpreted/cgnr.py#L85); idem [`cgne.py:36-37`](server-interpreted/cgne.py#L36-L37) e [`cgne.py:81`](server-interpreted/cgne.py#L81)). Go: `CGNR(H, g, 10, 1e-4)` em [`main.go:250`](server-compiled/main.go#L250), critério em [`cgnr.go:74`](server-compiled/cgnr.go#L74) |
+| **Relatório comparativo** entre as duas versões | [client/comparative_report.py](client/comparative_report.py) — tempos por algoritmo/modelo/servidor ([`_timings_rows:64`](client/comparative_report.py#L64)), speedup ([`_speedup_text:132`](client/comparative_report.py#L132)). Chamado em [`client.py:496`](client/client.py#L496) |
+| Objetivo: **mais reconstruções no menor tempo** | Métrica de **throughput** (rec/s) em [`_throughput_rows` — comparative_report.py:100-129](client/comparative_report.py#L100-L129) |
 
 Detalhes auxiliares dos servidores:
 
-- Ganho de sinal `γ_l = 100 + (1/20)·l·√l`: [`signal_gain.py`](server-interpreted/signal_gain.py) / [`signal_gain.go`](server-compiled/signal_gain.go), aplicado em [`server.py:199-201`](server-interpreted/server.py#L199-L201) / [`main.go:222-228`](server-compiled/main.go#L222-L228).
-- Parâmetros do enunciado `c = ‖HᵀH‖₂` e `λ = max(|Hᵀg|)·0,10`: [`params.py`](server-interpreted/params.py) / [`params.go`](server-compiled/params.go), calculados em [`server.py:207-208`](server-interpreted/server.py#L207-L208) / [`main.go:232-233`](server-compiled/main.go#L232-L233).
+- Ganho de sinal `γ_l = 100 + (1/20)·l·√l`: [`signal_gain.py`](server-interpreted/signal_gain.py) / [`signal_gain.go`](server-compiled/signal_gain.go), aplicado em [`server.py:201-205`](server-interpreted/server.py#L201-L205) / [`main.go:222-230`](server-compiled/main.go#L222-L230).
+- Parâmetros do enunciado `c = ‖HᵀH‖₂` e `λ = max(|Hᵀg|)·0,10`: [`params.py`](server-interpreted/params.py) / [`params.go`](server-compiled/params.go), calculados em [`server.py:209-210`](server-interpreted/server.py#L209-L210) / [`main.go:234-235`](server-compiled/main.go#L234-L235).
 - Carregamento da matriz `H` (sem cache, recalculada a cada requisição): [`_load_H` — server.py:65-76](server-interpreted/server.py#L65-L76) / [`LoadH` — loader.go:20](server-compiled/loader.go#L20).
-- Servidor HTTP e encoder PNG, ambos só com a stdlib: [`ReconstructHandler` — server.py:260-300](server-interpreted/server.py#L260-L300) / [`main.go`](server-compiled/main.go).
+- Servidor HTTP e encoder PNG, ambos só com a stdlib: [`ReconstructHandler` — server.py:272-313](server-interpreted/server.py#L272-L313) / [`main.go`](server-compiled/main.go).
 
 ---
 
