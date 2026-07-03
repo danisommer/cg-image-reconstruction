@@ -18,10 +18,7 @@
 //	    p_i+1 = z_i+1 + beta * p_i
 package main
 
-import (
-	"math"
-	"time"
-)
+import "time"
 
 // CGNR resolve H * f = g por gradiente conjugado no residual normal.
 //
@@ -49,7 +46,7 @@ func CGNR(H *Matrix, g []float64, maxIter int, tol float64) ([]float64, int, tim
 
 	zNormSq := Dot(z, z)
 	// epsilon = ||r_i+1||_2 - ||r_i||_2 (diferenca de normas, conforme enunciado)
-	prevRNorm := math.Sqrt(Dot(r, r))
+	prevRNorm := Sqrt(Dot(r, r))
 
 	nIter := 0
 	for i := 0; i < maxIter; i++ {
@@ -70,8 +67,8 @@ func CGNR(H *Matrix, g []float64, maxIter int, tol float64) ([]float64, int, tim
 			r[k] -= alpha * w[k]
 		}
 
-		newRNorm := math.Sqrt(Dot(r, r))
-		if math.Abs(newRNorm-prevRNorm) < tol {
+		newRNorm := Sqrt(Dot(r, r))
+		if Abs(newRNorm-prevRNorm) < tol {
 			break
 		}
 		prevRNorm = newRNorm

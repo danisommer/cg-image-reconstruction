@@ -16,6 +16,8 @@ from __future__ import annotations
 
 from typing import List, Sequence
 
+from linalg import sqrt
+
 
 def apply_signal_gain(g: Sequence[float], S: int, N: int) -> List[float]:
     """Aplica o ganho gamma_l a cada amostra l do sinal.
@@ -29,8 +31,8 @@ def apply_signal_gain(g: Sequence[float], S: int, N: int) -> List[float]:
     Returns:
         nova lista com o ganho aplicado (mesmo tamanho do input).
     """
-    # gamma_l = 100 + (1/20) * l * sqrt(l), para l = 1..S (raiz via expoente 0.5)
-    gamma = [100.0 + (1.0 / 20.0) * l * (l ** 0.5) for l in range(1, S + 1)]
+    # gamma_l = 100 + (1/20) * l * sqrt(l), para l = 1..S (sqrt implementado em linalg)
+    gamma = [100.0 + (1.0 / 20.0) * l * sqrt(l) for l in range(1, S + 1)]
 
     n = len(g)
     if n == S * N:

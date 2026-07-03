@@ -15,10 +15,7 @@
 //	    p     = H^T * r_new + beta * p
 package main
 
-import (
-	"math"
-	"time"
-)
+import "time"
 
 // CGNE resolve H * f = g por gradiente conjugado no erro normal.
 func CGNE(H *Matrix, g []float64, maxIter int, tol float64) ([]float64, int, time.Duration) {
@@ -33,7 +30,7 @@ func CGNE(H *Matrix, g []float64, maxIter int, tol float64) ([]float64, int, tim
 	p := H.TMatVec(r)
 
 	rNormSq := Dot(r, r)
-	prevRNorm := math.Sqrt(rNormSq)
+	prevRNorm := Sqrt(rNormSq)
 
 	nIter := 0
 	for i := 0; i < maxIter; i++ {
@@ -55,9 +52,9 @@ func CGNE(H *Matrix, g []float64, maxIter int, tol float64) ([]float64, int, tim
 		}
 
 		newRNormSq := Dot(r, r)
-		newRNorm := math.Sqrt(newRNormSq)
+		newRNorm := Sqrt(newRNormSq)
 
-		if math.Abs(newRNorm-prevRNorm) < tol {
+		if Abs(newRNorm-prevRNorm) < tol {
 			break
 		}
 		prevRNorm = newRNorm

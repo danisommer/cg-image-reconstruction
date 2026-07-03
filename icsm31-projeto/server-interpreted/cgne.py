@@ -20,7 +20,7 @@ from __future__ import annotations
 import time
 from typing import List, Sequence, Tuple
 
-from linalg import Matrix, axpy, dot
+from linalg import Matrix, axpy, dot, fabs, sqrt
 
 
 def cgne(
@@ -52,7 +52,7 @@ def cgne(
     p = H.rmatvec(r)
 
     r_norm_sq = dot(r, r)
-    prev_r_norm = r_norm_sq ** 0.5
+    prev_r_norm = sqrt(r_norm_sq)
 
     n_iter = 0
     for i in range(max_iter):
@@ -69,10 +69,10 @@ def cgne(
         r = axpy(-alpha, Hp, r)
 
         new_r_norm_sq = dot(r, r)
-        new_r_norm = new_r_norm_sq ** 0.5
+        new_r_norm = sqrt(new_r_norm_sq)
 
         epsilon = new_r_norm - prev_r_norm
-        if abs(epsilon) < tol:
+        if fabs(epsilon) < tol:
             break
         prev_r_norm = new_r_norm
 

@@ -1,15 +1,13 @@
 // Package main — Algebra linear em Go puro, sem gonum.
 //
 // Todos os "calculos" da reconstrucao (produto matriz-vetor, produto da
-// transposta por vetor, produto interno e norma) sao implementados aqui
-// manualmente. Nenhuma biblioteca de calculo numerico e utilizada — apenas o
-// pacote padrao `math` para a raiz quadrada. A matriz e guardada de forma
-// densa num unico slice em ordem row-major:
+// transposta por vetor, produto interno, norma, raiz quadrada e valor absoluto)
+// sao implementados aqui manualmente. NENHUMA biblioteca e utilizada — nem
+// mesmo o pacote `math`. A matriz e guardada de forma densa num unico slice em
+// ordem row-major:
 //
 //	H[i][j] == Data[i*Cols + j]
 package main
-
-import "math"
 
 // Matrix e uma matriz densa de float64 (row-major).
 type Matrix struct {
@@ -70,7 +68,34 @@ func Dot(a, b []float64) float64 {
 	return s
 }
 
-// Norm calcula a norma-2 (euclidiana) de a.
+// Abs devolve o valor absoluto de x — implementado no proprio codigo (sem math).
+func Abs(x float64) float64 {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
+
+// Sqrt calcula a raiz quadrada por Newton-Raphson, no proprio codigo (sem math).
+//
+// Resolve x^2 = a iterando x <- (x + a/x) / 2 ate estabilizar. Para a <= 0
+// retorna 0 (os usos deste projeto — normas e sqrt(l) do ganho — sao >= 0).
+func Sqrt(a float64) float64 {
+	if a <= 0 {
+		return 0
+	}
+	x := a
+	for i := 0; i < 100; i++ {
+		nx := 0.5 * (x + a/x)
+		if Abs(nx-x) <= 1e-15*nx {
+			return nx
+		}
+		x = nx
+	}
+	return x
+}
+
+// Norm calcula a norma-2 (euclidiana) de a, usando o Sqrt implementado acima.
 func Norm(a []float64) float64 {
-	return math.Sqrt(Dot(a, a))
+	return Sqrt(Dot(a, a))
 }

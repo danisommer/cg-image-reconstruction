@@ -11,23 +11,13 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"sync"
 )
 
-var (
-	hCache   = make(map[string]*Matrix)
-	hCacheMu sync.RWMutex
-)
-
-// LoadH carrega a matriz H de um arquivo CSV (com cache em memoria).
+// LoadH carrega a matriz H de um arquivo CSV.
+//
+// Sem cache: cada requisicao le a matriz do zero, para que toda reconstrucao
+// seja independente (nenhum estado reaproveitado entre requisicoes).
 func LoadH(path string) (*Matrix, error) {
-	hCacheMu.RLock()
-	if H, ok := hCache[path]; ok {
-		hCacheMu.RUnlock()
-		return H, nil
-	}
-	hCacheMu.RUnlock()
-
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("abrir %s: %w", path, err)
@@ -73,11 +63,6 @@ func LoadH(path string) (*Matrix, error) {
 	}
 
 	H := NewMatrix(rowCount, cols, flat)
-
-	hCacheMu.Lock()
-	hCache[path] = H
-	hCacheMu.Unlock()
-
 	log.Printf("Matriz H carregada de %s, shape=(%d, %d)", path, H.Rows, H.Cols)
 	return H, nil
 }

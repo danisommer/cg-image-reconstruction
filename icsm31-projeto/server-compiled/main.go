@@ -36,7 +36,6 @@ import (
 	"image/color"
 	"image/png"
 	"log"
-	"math"
 	"net/http"
 	"os"
 	"strings"
@@ -132,8 +131,8 @@ func vectorToPNG(f []float64, width, height int, texts []textPair) ([]byte, erro
 		return nil, fmt.Errorf("dimensao incorreta: %d != %d*%d", n, width, height)
 	}
 
-	// normaliza para [0, 255]
-	minV, maxV := math.Inf(1), math.Inf(-1)
+	// normaliza para [0, 255] (min/max iniciados com o 1o elemento — n > 0 aqui)
+	minV, maxV := f[0], f[0]
 	for _, v := range f {
 		if v < minV {
 			minV = v
@@ -210,25 +209,14 @@ func reconstructHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	g := append([]float64(nil), req.G...)
 
-	var H *Matrix
-	var hKey string
-	switch {
-	case req.HPath != "":
-		hKey = req.HPath
-		d, err := LoadH(hKey)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		H = d
-	default:
-		hKey = defaultHPath(req.Model)
-		d, err := LoadH(hKey)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		H = d
+	hPath := req.HPath
+	if hPath == "" {
+		hPath = defaultHPath(req.Model)
+	}
+	H, err := LoadH(hPath)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	applyGain := true
@@ -239,9 +227,9 @@ func reconstructHandler(w http.ResponseWriter, r *http.Request) {
 		ApplySignalGain(g, cfg.S, cfg.N)
 	}
 
-	// Parametros do enunciado: c = ||H^T H||_2 (cacheado por H) e
-	// lambda = max(abs(H^T g)) * 0.10 (com o sinal ja com ganho).
-	cReduction := ReductionFactor(H, hKey)
+	// Parametros do enunciado (recalculados do zero a cada requisicao):
+	//   c = ||H^T H||_2  e  lambda = max(abs(H^T g)) * 0.10
+	cReduction := ReductionFactor(H)
 	lambdaReg := RegularizationLambda(H, g)
 
 	algo := strings.ToLower(strings.TrimSpace(req.Algorithm))

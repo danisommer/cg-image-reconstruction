@@ -7,23 +7,21 @@ Parametros definidos no enunciado (Algoritmos e definicoes) — Python puro.
 Como ||H^T H||_2 = sigma_max(H)^2 (maior autovalor de H^T H), o fator de
 reducao e obtido por iteracao de potencia sobre H^T H, evitando montar a
 matriz cheia ou rodar uma SVD completa em H (50816 x 3600). Toda a algebra
-e feita no proprio codigo (modulo `linalg`), sem numpy/scipy. O resultado e
-cacheado por caminho de H, pois depende apenas da matriz de modelo.
+e feita no proprio codigo (modulo `linalg`), sem numpy/scipy.
+
+Sem cache: c e recalculado do zero a cada requisicao (nenhum estado e
+reaproveitado entre reconstrucoes).
 """
 
 from __future__ import annotations
 
-from typing import Optional, Sequence
+from typing import Sequence
 
-from linalg import Matrix, norm
-
-# Cache do fator de reducao por chave (caminho de H). c depende so de H.
-_C_CACHE: dict[str, float] = {}
+from linalg import Matrix, fabs, norm
 
 
 def reduction_factor(
     H: Matrix,
-    cache_key: Optional[str] = None,
     max_iter: int = 100,
     tol: float = 1e-4,
 ) -> float:
@@ -34,7 +32,6 @@ def reduction_factor(
 
     Args:
         H: matriz de modelo (linalg.Matrix), shape (S, M).
-        cache_key: chave de cache (ex.: caminho do arquivo de H). Se None, nao cacheia.
         max_iter: numero maximo de iteracoes de potencia (limite de seguranca).
         tol: tolerancia relativa para parada. Para as matrizes H deste projeto
              o autovalor dominante e pouco separado, entao |dnw|/nw estabiliza
@@ -45,9 +42,6 @@ def reduction_factor(
     Returns:
         c: o valor da norma-2 de H^T H (>= 0).
     """
-    if cache_key is not None and cache_key in _C_CACHE:
-        return _C_CACHE[cache_key]
-
     m = H.cols
     v = [1.0] * m
     nv = norm(v)
@@ -64,15 +58,12 @@ def reduction_factor(
             eigval = 0.0
             break
         v = [x / nw for x in w]
-        if abs(nw - eigval) <= tol * nw:
+        if fabs(nw - eigval) <= tol * nw:
             eigval = nw
             break
         eigval = nw
 
-    c = float(eigval)
-    if cache_key is not None:
-        _C_CACHE[cache_key] = c
-    return c
+    return float(eigval)
 
 
 def regularization_lambda(H: Matrix, g: Sequence[float]) -> float:
@@ -80,7 +71,7 @@ def regularization_lambda(H: Matrix, g: Sequence[float]) -> float:
     htg = H.rmatvec(g)
     max_abs = 0.0
     for value in htg:
-        a = value if value >= 0.0 else -value
+        a = fabs(value)
         if a > max_abs:
             max_abs = a
     return max_abs * 0.10

@@ -56,19 +56,16 @@ MODEL_CONFIG = {
     2: {"S": 436, "N": 64, "size": (30, 30)},
 }
 
-H_CACHE: dict[str, Matrix] = {}
-
-
 def _load_H(path: str) -> Matrix:
-    """Carrega matriz H de arquivo CSV/texto em Python puro (com cache em memoria)."""
-    if path in H_CACHE:
-        return H_CACHE[path]
+    """Carrega a matriz H de arquivo CSV/texto em Python puro.
+
+    Sem cache: cada requisicao le a matriz do zero, para que toda reconstrucao
+    seja independente (nenhum estado reaproveitado entre requisicoes).
+    """
     if not os.path.exists(path):
         raise FileNotFoundError(f"Matriz H nao encontrada: {path}")
 
     H = load_matrix_csv(path)
-
-    H_CACHE[path] = H
     LOG.info("Matriz H carregada de %s, shape=%s", path, H.shape)
     return H
 
@@ -134,10 +131,8 @@ def reconstruct() -> tuple:
     g: List[float] = [float(x) for x in g_raw]
 
     H: Optional[Matrix] = None
-    h_key: Optional[str] = None
     if "H_path" in payload and payload["H_path"]:
-        h_key = payload["H_path"]
-        H = _load_H(h_key)
+        H = _load_H(payload["H_path"])
     else:
         default_path = os.environ.get(f"H_MODEL_{model}_PATH")
         if not default_path:
@@ -153,7 +148,6 @@ def reconstruct() -> tuple:
                 jsonify({"error": f"matriz H do modelo {model} nao encontrada em ./data"}),
                 500,
             )
-        h_key = default_path
         H = _load_H(default_path)
 
     if apply_gain:
@@ -162,9 +156,9 @@ def reconstruct() -> tuple:
         except Exception as exc:
             LOG.warning("Falha no ganho de sinal: %s", exc)
 
-    # Parametros do enunciado: c = ||H^T H||_2 (cacheado por H) e
-    # lambda = max(abs(H^T g)) * 0.10 (depende do sinal ja com ganho).
-    c_reduction = reduction_factor(H, cache_key=h_key)
+    # Parametros do enunciado (recalculados do zero a cada requisicao):
+    #   c = ||H^T H||_2  e  lambda = max(abs(H^T g)) * 0.10
+    c_reduction = reduction_factor(H)
     lambda_reg = regularization_lambda(H, g)
 
     started_at = datetime.now(timezone.utc)

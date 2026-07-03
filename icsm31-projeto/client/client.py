@@ -49,7 +49,12 @@ class SignalFile:
 
 @dataclass
 class RoundSpec:
-    """Descricao imutavel de uma rodada — reaproveitada por cada servidor."""
+    """Descricao imutavel de uma rodada — reaproveitada por cada servidor.
+
+    Tudo o que varia entre rodadas (algoritmo, modelo, sinal, g e ATE o atraso
+    apos a rodada) e sorteado UMA vez aqui e replicado identicamente contra cada
+    servidor: mesmos sinais, mesma ordem e o mesmo atraso para os dois.
+    """
 
     round_idx: int
     request_id: str
@@ -58,6 +63,7 @@ class RoundSpec:
     signal: SignalFile
     g: List[float]
     h_path: str
+    delay_after: float  # atraso (s) apos esta rodada; fixo p/ os dois servidores
 
 
 LOG = logging.getLogger("client")
@@ -268,12 +274,19 @@ def _build_jobs(
 def _build_plan(
     jobs: List[Tuple[str, SignalFile]],
     data_dir: str,
+    rng: random.Random,
 ) -> List[RoundSpec]:
-    """Converte os jobs num plano fixo (carrega g e resolve H uma unica vez)."""
+    """Converte os jobs num plano fixo (carrega g, resolve H e sorteia o atraso).
+
+    O atraso de cada rodada e sorteado AQUI, uma unica vez, e guardado no plano —
+    assim os dois servidores recebem exatamente os mesmos sinais, na mesma ordem
+    e com os mesmos atrasos entre rodadas.
+    """
     plan: List[RoundSpec] = []
     for round_idx, (algorithm, signal) in enumerate(jobs, start=1):
         request_id = uuid.uuid4().hex[:8]
         model = signal.model
+        delay_after = rng.uniform(0.5, 3.0)
 
         try:
             g = _load_signal(signal.path)
@@ -300,6 +313,7 @@ def _build_plan(
                 signal=signal,
                 g=g,
                 h_path=h_path,
+                delay_after=delay_after,
             )
         )
     return plan
@@ -338,7 +352,6 @@ def _run_server_phase(
     url: str,
     plan: List[RoundSpec],
     timeout_s: float,
-    rng: random.Random,
 ) -> List[ReconstructionResult]:
     """Executa todas as rodadas do plano contra UM servidor, sequencialmente."""
     results: List[ReconstructionResult] = []
@@ -370,11 +383,14 @@ def _run_server_phase(
         if rec is not None:
             results.append(rec)
 
-        # intervalo aleatorio entre rodadas
+        # atraso FIXO do plano (identico para os dois servidores)
         if i < total:
-            delay = rng.uniform(0.5, 3.0)
-            LOG.info("[%s] aguardando %.2fs ate proxima rodada", spec.request_id, delay)
-            time.sleep(delay)
+            LOG.info(
+                "[%s] aguardando %.2fs ate proxima rodada",
+                spec.request_id,
+                spec.delay_after,
+            )
+            time.sleep(spec.delay_after)
 
     return results
 
@@ -399,7 +415,7 @@ def run_rounds(
         return
 
     jobs = _build_jobs(signal_pool, rounds, rng)
-    plan = _build_plan(jobs, data_dir)
+    plan = _build_plan(jobs, data_dir, rng)
     if not plan:
         LOG.error("Nenhuma rodada valida montada — nada a fazer.")
         return
@@ -423,7 +439,7 @@ def run_rounds(
             len(plan),
             server_name,
         )
-        results = _run_server_phase(server_name, url, plan, timeout_s, rng)
+        results = _run_server_phase(server_name, url, plan, timeout_s)
         all_results.extend(results)
         LOG.info(
             "Fase do servidor '%s' concluida: %d/%d reconstrucoes coletadas.",

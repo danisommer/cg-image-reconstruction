@@ -92,14 +92,40 @@ class Matrix:
         return out
 
 
+def fabs(x: float) -> float:
+    """Valor absoluto de x — implementado no proprio codigo (sem a lib math)."""
+    return -x if x < 0.0 else x
+
+
+def sqrt(a: float) -> float:
+    """Raiz quadrada por Newton-Raphson, implementada no proprio codigo.
+
+    Sem math.sqrt e sem o operador ** (pow): resolve x^2 = a iterando
+    x <- (x + a/x) / 2 ate estabilizar. Para a <= 0 retorna 0 (os usos deste
+    projeto — normas e sqrt(l) do ganho — sao sempre >= 0).
+    """
+    if a <= 0.0:
+        return 0.0
+    x = a
+    for _ in range(100):
+        nx = 0.5 * (x + a / x)
+        d = nx - x
+        if d < 0.0:
+            d = -d
+        if d <= 1e-15 * nx:
+            return nx
+        x = nx
+    return x
+
+
 def dot(a: Sequence[float], b: Sequence[float]) -> float:
     """Produto interno a . b (via map/sum, ainda Python puro)."""
     return sum(map(mul, a, b))
 
 
 def norm(a: Sequence[float]) -> float:
-    """Norma-2 (euclidiana) de a — sqrt via expoente 0.5, sem bibliotecas."""
-    return sum(map(mul, a, a)) ** 0.5
+    """Norma-2 (euclidiana) de a, usando o sqrt implementado acima."""
+    return sqrt(sum(map(mul, a, a)))
 
 
 def axpy(alpha: float, x: Sequence[float], y: Sequence[float]) -> List[float]:

@@ -27,7 +27,7 @@ from __future__ import annotations
 import time
 from typing import List, Sequence, Tuple
 
-from linalg import Matrix, axpy, dot
+from linalg import Matrix, axpy, dot, fabs, sqrt
 
 
 def cgnr(
@@ -61,7 +61,7 @@ def cgnr(
 
     z_norm_sq = dot(z, z)
     # epsilon = ||r_i+1||_2 - ||r_i||_2 (diferenca de normas, conforme enunciado)
-    prev_r_norm = dot(r, r) ** 0.5
+    prev_r_norm = sqrt(dot(r, r))
 
     n_iter = 0
     for i in range(max_iter):
@@ -77,9 +77,9 @@ def cgnr(
         f = axpy(alpha, p, f)
         r = axpy(-alpha, w, r)
 
-        new_r_norm = dot(r, r) ** 0.5
+        new_r_norm = sqrt(dot(r, r))
         epsilon = new_r_norm - prev_r_norm
-        if abs(epsilon) < tol:
+        if fabs(epsilon) < tol:
             break
         prev_r_norm = new_r_norm
 
