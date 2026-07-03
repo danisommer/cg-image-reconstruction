@@ -94,6 +94,14 @@ pip install -r requirements.txt
 python client.py --rounds 20
 ```
 
+Por padrão o cliente sorteia o tamanho (30x30 ou 60x60) a cada rodada. Para
+fixar **todas** as rodadas de uma execução em um único tamanho, use `--size`:
+
+```bash
+python client.py --size 30x30 --rounds 20   # todas as rodadas em 30x30 (modelo 2)
+python client.py --size 60x60 --rounds 10   # todas as rodadas em 60x60 (modelo 1)
+```
+
 O cliente pausa entre as fases pedindo a troca de servidor (eles não rodam em
 paralelo). Ao final, os PDFs são gravados em `reports/`:
 

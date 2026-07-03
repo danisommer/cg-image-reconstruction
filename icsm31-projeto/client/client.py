@@ -401,6 +401,7 @@ def run_rounds(
     timeout_s: float,
     seed: Optional[int],
     rounds: int,
+    model: Optional[int] = None,
 ) -> None:
     rng = random.Random(seed)
     order = SERVER_ORDER
@@ -413,6 +414,21 @@ def run_rounds(
     if not signal_pool:
         LOG.error("Nenhum sinal encontrado em %s — nada a fazer.", data_dir)
         return
+
+    # Se --size foi informado, fixa TODAS as rodadas em um unico modelo/tamanho.
+    if model is not None:
+        w, h = MODEL_CONFIG[model]["size"]
+        signal_pool = [s for s in signal_pool if s.model == model]
+        if not signal_pool:
+            LOG.error(
+                "Nenhum sinal do modelo %d (%dx%d) encontrado em %s — nada a fazer.",
+                model, w, h, data_dir,
+            )
+            return
+        LOG.info(
+            "Execucao restrita ao modelo %d (%dx%d): %d sinal(is) no pool.",
+            model, w, h, len(signal_pool),
+        )
 
     jobs = _build_jobs(signal_pool, rounds, rng)
     plan = _build_plan(jobs, data_dir, rng)
@@ -454,8 +470,13 @@ def run_rounds(
 
     # Nome do PDF prioriza a configuracao da execucao; o timestamp vai como
     # sufixo apenas para nao sobrescrever execucoes com a mesma configuracao.
+    if model is not None:
+        w, h = MODEL_CONFIG[model]["size"]
+        size_slug = f"{w}x{h}"
+    else:
+        size_slug = "misto"
     config_slug = (
-        f"aleatorio-{len(plan)}rodada{'s' if len(plan) != 1 else ''}"
+        f"{size_slug}_{len(plan)}rodada{'s' if len(plan) != 1 else ''}"
         "_1servidor-por-vez"
     )
 
@@ -477,8 +498,10 @@ def main() -> int:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Exemplos:\n"
-            "  client.py                      # 5 rodadas aleatorias\n"
-            "  client.py --rounds 20          # 20 rodadas aleatorias\n"
+            "  client.py                      # 5 rodadas, tamanho sorteado\n"
+            "  client.py --rounds 20          # 20 rodadas, tamanho sorteado\n"
+            "  client.py --size 30x30         # todas as rodadas em 30x30\n"
+            "  client.py --size 60x60 --rounds 10  # 10 rodadas, todas 60x60\n"
             "\nO mesmo plano de rodadas e executado contra cada servidor, UM DE\n"
             "CADA VEZ. Entre servidores o cliente pausa e pede a troca — eles\n"
             "nunca rodam em paralelo."
@@ -489,6 +512,14 @@ def main() -> int:
         type=int,
         default=5,
         help="numero de rodadas aleatorias (default 5)",
+    )
+    parser.add_argument(
+        "--size",
+        choices=["30x30", "60x60"],
+        default=None,
+        help="fixa TODAS as rodadas em um unico tamanho de imagem "
+        "(30x30 = modelo 2, 60x60 = modelo 1). "
+        "Sem esta opcao, o tamanho e sorteado a cada rodada.",
     )
     parser.add_argument(
         "--data-dir",
@@ -517,12 +548,17 @@ def main() -> int:
         LOG.error("--rounds deve ser >= 1")
         return 1
 
+    # 30x30 -> modelo 2, 60x60 -> modelo 1 (None = sorteia os dois)
+    size_to_model = {"30x30": 2, "60x60": 1}
+    model = size_to_model.get(args.size)
+
     run_rounds(
         data_dir=args.data_dir,
         report_dir=args.report_dir,
         timeout_s=args.timeout,
         seed=args.seed,
         rounds=args.rounds,
+        model=model,
     )
     return 0
 
